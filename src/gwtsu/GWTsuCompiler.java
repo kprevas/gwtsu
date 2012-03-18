@@ -30,7 +30,6 @@ public class GWTsuCompiler {
     URL[] gwtsuCacheUrls = new URL[1];
     File gwtsuCache = new File("gwtsu-cache");
     Gosu.init(Arrays.asList(new File("src")));
-    GWTSuIRClassCompiler compiler = new GWTSuIRClassCompiler();
     GosuClassTypeLoader gosuClassTypeLoader = TypeSystem.getTypeLoader(GosuClassTypeLoader.class);
     Set<? extends CharSequence> typeNames = gosuClassTypeLoader.getRepository().getAllTypeNames(
             new String[]{"gs", "gsx", "gst"});
@@ -51,7 +50,7 @@ public class GWTsuCompiler {
           if (!javaFile.exists() ||
                   javaFile.lastModified() < ((IGosuClass) type).getSourceFileHandle().getFileTimestamp()) {
             IRClass irClass = (IRClass) compile.invoke(null, type);
-            String javaSource = compiler.compileToJava(irClass);
+            String javaSource = new GWTSuIRClassCompiler(irClass).compileToJava();
             dir.mkdirs();
             FileUtils.writeStringToFile(javaFile, javaSource);
           }

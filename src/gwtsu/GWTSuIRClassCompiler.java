@@ -83,9 +83,12 @@ public class GWTSuIRClassCompiler {
   }
   
   private IRClass irClass;
-
-  public String compileToJava(IRClass irClass) {
+  
+  public GWTSuIRClassCompiler(IRClass irClass) {
     this.irClass = irClass;
+  }
+
+  public String compileToJava() {
     StringBuilder builder = new StringBuilder();
     builder.append("package ")
             .append(GosuClassUtil.getPackage(irClass.getName()))
