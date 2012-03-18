@@ -167,12 +167,16 @@ public class GWTSuIRClassCompiler {
               .append(parameter.getName());
     }
     builder.append(") ");
-    if (!(method.getMethodBody() instanceof IRStatementList)) {
-      builder.append("{\n");
-    }
-    appendStatement(builder, method.getMethodBody());
-    if (!(method.getMethodBody() instanceof IRStatementList)) {
-      builder.append("}\n");
+    if (method.getMethodBody() != null) {
+      if (!(method.getMethodBody() instanceof IRStatementList)) {
+        builder.append("{\n");
+      }
+      appendStatement(builder, method.getMethodBody());
+      if (!(method.getMethodBody() instanceof IRStatementList)) {
+        builder.append("}\n");
+      }
+    } else {
+      builder.append(";\n");
     }
   }
 
