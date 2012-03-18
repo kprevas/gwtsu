@@ -304,6 +304,14 @@ public class GWTSuIRClassCompiler {
     } else if (statement instanceof IRNoOpStatement) {
       // no-op
     } else if (statement instanceof IRReturnStatement) {
+      IRElement ancestor = statement.getParent();
+      while (ancestor != null) {
+        if (ancestor instanceof IRMethodStatement &&
+                ((IRMethodStatement) ancestor).getName().endsWith("init>")) {
+          return;
+        }
+        ancestor = ancestor.getParent();
+      }
       builder.append("return");
       IRReturnStatement returnStatement = (IRReturnStatement) statement;
       if (returnStatement.getReturnValue() != null) {
