@@ -177,9 +177,11 @@ public class GWTSuIRClassCompiler {
           builder.append(", ");
         }
         IRSymbol parameter = parameters.get(i);
+        String paramName = getSymbolName(parameter);
         builder.append(getTypeName(parameter.getType()))
                 .append(" ")
-                .append(getSymbolName(parameter));
+                .append(paramName);
+        symbols.add(paramName);
       }
       builder.append(") ");
     }
