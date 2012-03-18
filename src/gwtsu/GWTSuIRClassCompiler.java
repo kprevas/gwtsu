@@ -199,8 +199,10 @@ public class GWTSuIRClassCompiler {
   private void appendStatement(StringBuilder builder, IRStatement statement, Set<String> symbols) {
     if (statement instanceof IRFieldDecl) {
       // TODO kcp
+      builder.append("/* IRFieldDecl */");
     } else if (statement instanceof IRMethodStatement) {
       // TODO kcp
+      builder.append("/* IRMethodStatement */");
     } else if (statement instanceof IRArrayStoreStatement) {
       IRArrayStoreStatement arrayStoreStatement = (IRArrayStoreStatement) statement;
       appendExpression(builder, arrayStoreStatement.getTarget(), symbols);
@@ -234,6 +236,7 @@ public class GWTSuIRClassCompiler {
       builder.append(");\n");
     } else if (statement instanceof IREvalStatement) {
       // TODO kcp
+      builder.append("/* IREvalStatement */");
     } else if (statement instanceof IRFieldSetStatement) {
       IRFieldSetStatement fieldSetStatement = (IRFieldSetStatement) statement;
       if (fieldSetStatement.getLhs() != null) {
@@ -288,8 +291,10 @@ public class GWTSuIRClassCompiler {
       builder.append(";\n");
     } else if (statement instanceof IRMonitorLockAcquireStatement) {
       // TODO kcp
+      builder.append("/* IRMonitorLockAcquireStatement */");
     } else if (statement instanceof IRMonitorLockReleaseStatement) {
       // TODO kcp
+      builder.append("/* IRMonitorLockReleaseStatement */");
     } else if (statement instanceof IRNoOpStatement) {
       // no-op
     } else if (statement instanceof IRReturnStatement) {
@@ -309,8 +314,10 @@ public class GWTSuIRClassCompiler {
       builder.append("}\n");
     } else if (statement instanceof IRSwitchStatement) {
       // TODO kcp
+      builder.append("/* IRSwitchStatement */");
     } else if (statement instanceof IRSyntheticStatement) {
       // TODO kcp
+      builder.append("/* IRSyntheticStatement */");
     } else if (statement instanceof IRThrowStatement) {
       builder.append("throw ");
       appendExpression(builder, ((IRThrowStatement) statement).getException(), symbols);
@@ -355,6 +362,7 @@ public class GWTSuIRClassCompiler {
       builder.append(".length");
     } else if (expression instanceof IRArrayLoadExpression) {
       // TODO kcp
+      builder.append("/* IRArrayLoadExpression */");
     } else if (expression instanceof IRBooleanLiteral) {
       builder.append(((IRBooleanLiteral) expression).getValue());
     } else if (expression instanceof IRCastExpression) {
@@ -371,6 +379,7 @@ public class GWTSuIRClassCompiler {
       builder.append(getTypeName(((IRClassLiteral) expression).getLiteralType()));
     } else if (expression instanceof IRCompositeExpression) {
       // TODO kcp
+      builder.append("/* IRCompositeExpression */");
     } else if (expression instanceof IRConditionalAndExpression) {
       IRConditionalAndExpression andExpression = (IRConditionalAndExpression) expression;
       appendExpression(builder, andExpression.getLhs(), symbols);
@@ -492,6 +501,7 @@ public class GWTSuIRClassCompiler {
       builder.append(((IRNumericLiteral) expression).getValue());
     } else if (expression instanceof IRPrimitiveTypeConversion) {
       // TODO kcp
+      builder.append("/* IRPrimitiveTypeConversion */");
     } else if (expression instanceof IRRelationalExpression) {
       IRRelationalExpression relationalExpression = (IRRelationalExpression) expression;
       appendExpression(builder, relationalExpression.getLhs(), symbols);
