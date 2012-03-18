@@ -63,6 +63,7 @@ import gw.lang.ir.statement.IRWhileStatement;
 import gw.lang.reflect.Modifier;
 import gw.util.GosuClassUtil;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -156,7 +157,7 @@ public class GWTSuIRClassCompiler {
     if (method.getName().equals("getIntrinsicType") || method.getName().startsWith("$")) {
       return;
     }
-    Set<String> symbols = Sets.newHashSet();
+    Map<String, IRSymbol> symbols = Maps.newHashMap();
     for (IRAnnotation annotation : method.getAnnotations()) {
       appendAnnotation(builder, annotation);
     }
@@ -181,7 +182,7 @@ public class GWTSuIRClassCompiler {
         builder.append(getTypeName(parameter.getType()))
                 .append(" ")
                 .append(paramName);
-        symbols.add(paramName);
+        symbols.put(paramName, parameter);
       }
       builder.append(") ");
     }
@@ -198,7 +199,7 @@ public class GWTSuIRClassCompiler {
     }
   }
 
-  private void appendStatement(StringBuilder builder, IRStatement statement, Set<String> symbols) {
+  private void appendStatement(StringBuilder builder, IRStatement statement, Map<String, IRSymbol> symbols) {
     if (statement instanceof IRFieldDecl) {
       // TODO kcp
       builder.append("/* IRFieldDecl */");
@@ -216,10 +217,10 @@ public class GWTSuIRClassCompiler {
     } else if (statement instanceof IRAssignmentStatement) {
       IRAssignmentStatement assignmentStatement = (IRAssignmentStatement) statement;
       String symbolName = getSymbolName(assignmentStatement.getSymbol());
-      if (!symbols.contains(symbolName)) {
+      if (!symbols.containsKey(symbolName)) {
         builder.append(getTypeName(assignmentStatement.getSymbol().getType()))
                 .append(" ");
-        symbols.add(symbolName);
+        symbols.put(symbolName, assignmentStatement.getSymbol());
       }
       builder.append(symbolName)
               .append(" = ");
@@ -232,7 +233,7 @@ public class GWTSuIRClassCompiler {
     } else if (statement instanceof IRDoWhileStatement) {
       IRDoWhileStatement doWhileStatement = (IRDoWhileStatement) statement;
       builder.append("do ");
-      appendStatement(builder, doWhileStatement.getBody(), Sets.newHashSet(symbols));
+      appendStatement(builder, doWhileStatement.getBody(), Maps.newHashMap(symbols));
       builder.append("while(");
       appendExpression(builder, doWhileStatement.getLoopTest(), symbols);
       builder.append(");\n");
@@ -251,7 +252,7 @@ public class GWTSuIRClassCompiler {
       builder.append(";\n");
     } else if (statement instanceof IRForEachStatement) {
       IRForEachStatement forEachStatement = (IRForEachStatement) statement;
-      HashSet<String> innerSymbols = Sets.newHashSet(symbols);
+      Map<String, IRSymbol> innerSymbols = Maps.newHashMap(symbols);
       builder.append("for (");
       List<IRStatement> initializers = forEachStatement.getInitializers();
       for (int i = 0, initializersSize = initializers.size(); i < initializersSize; i++) {
@@ -283,10 +284,10 @@ public class GWTSuIRClassCompiler {
       builder.append("if (");
       appendExpression(builder, ifStatement.getExpression(), symbols);
       builder.append(") ");
-      appendStatement(builder, ifStatement.getIfStatement(), Sets.newHashSet(symbols));
+      appendStatement(builder, ifStatement.getIfStatement(), Maps.newHashMap(symbols));
       if (ifStatement.getElseStatement() != null) {
         builder.append(" else ");
-        appendStatement(builder, ifStatement.getElseStatement(), Sets.newHashSet(symbols));
+        appendStatement(builder, ifStatement.getElseStatement(), Maps.newHashMap(symbols));
       }
     } else if (statement instanceof IRMethodCallStatement) {
       appendExpression(builder, ((IRMethodCallStatement) statement).getExpression(), symbols);
@@ -309,7 +310,7 @@ public class GWTSuIRClassCompiler {
       builder.append(";\n");
     } else if (statement instanceof IRStatementList) {
       builder.append("{\n");
-      HashSet<String> innerSymbols = Sets.newHashSet(symbols);
+      Map<String, IRSymbol> innerSymbols = Maps.newHashMap(symbols);
       for (IRStatement child : ((IRStatementList) statement).getStatements()) {
         appendStatement(builder, child, innerSymbols);
       }
@@ -327,31 +328,31 @@ public class GWTSuIRClassCompiler {
     } else if (statement instanceof IRTryCatchFinallyStatement) {
       builder.append("try ");
       IRTryCatchFinallyStatement tryCatchFinallyStatement = (IRTryCatchFinallyStatement) statement;
-      appendStatement(builder, tryCatchFinallyStatement.getTryBody(), Sets.newHashSet(symbols));
+      appendStatement(builder, tryCatchFinallyStatement.getTryBody(), Maps.newHashMap(symbols));
       for (IRCatchClause catchClause : tryCatchFinallyStatement.getCatchStatements()) {
         builder.append(" catch (")
                 .append(getTypeName(catchClause.getIdentifier().getType()))
                 .append(" ")
                 .append(getSymbolName(catchClause.getIdentifier()))
                 .append(") ");
-        appendStatement(builder, catchClause.getBody(), Sets.newHashSet(symbols));
+        appendStatement(builder, catchClause.getBody(), Maps.newHashMap(symbols));
       }
       if (tryCatchFinallyStatement.getFinallyBody() != null) {
         builder.append(" finally ");
-        appendStatement(builder, tryCatchFinallyStatement.getFinallyBody(), Sets.newHashSet(symbols));
+        appendStatement(builder, tryCatchFinallyStatement.getFinallyBody(), Maps.newHashMap(symbols));
       }
     } else if (statement instanceof IRWhileStatement) {
       builder.append("while (");
       IRWhileStatement whileStatement = (IRWhileStatement) statement;
       appendExpression(builder, whileStatement.getLoopTest(), symbols);
       builder.append(") ");
-      appendStatement(builder, whileStatement.getBody(), Sets.newHashSet(symbols));
+      appendStatement(builder, whileStatement.getBody(), Maps.newHashMap(symbols));
     } else {
       throw new IllegalArgumentException("Unknown statement type " + statement.getClass().getSimpleName());
     }
   }
 
-  private void appendExpression(StringBuilder builder, IRExpression expression, Set<String> symbols) {
+  private void appendExpression(StringBuilder builder, IRExpression expression, Map<String, IRSymbol> symbols) {
     if (expression instanceof IRArithmeticExpression) {
       IRArithmeticExpression arithmeticExpression = (IRArithmeticExpression) expression;
       appendExpression(builder, arithmeticExpression.getLhs(), symbols);
