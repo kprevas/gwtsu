@@ -212,9 +212,11 @@ public class GWTSuIRClassCompiler {
       // TODO kcp
     } else if (statement instanceof IRFieldSetStatement) {
       IRFieldSetStatement fieldSetStatement = (IRFieldSetStatement) statement;
-      appendExpression(builder, fieldSetStatement.getLhs());
-      builder.append(".")
-              .append(fieldSetStatement.getName())
+      if (fieldSetStatement.getLhs() != null) {
+        appendExpression(builder, fieldSetStatement.getLhs());
+        builder.append(".");
+      }
+      builder.append(fieldSetStatement.getName())
               .append(" = ");
       appendExpression(builder, fieldSetStatement.getRhs());
       builder.append(";\n");
@@ -354,9 +356,11 @@ public class GWTSuIRClassCompiler {
       appendExpression(builder, equalityExpression.getRhs());
     } else if (expression instanceof IRFieldGetExpression) {
       IRFieldGetExpression fieldGetExpression = (IRFieldGetExpression) expression;
-      appendExpression(builder, fieldGetExpression.getLhs());
-      builder.append(".")
-              .append(fieldGetExpression.getName());
+      if (fieldGetExpression.getLhs() != null) {
+        appendExpression(builder, fieldGetExpression.getLhs());
+        builder.append(".");
+      }
+      builder.append(fieldGetExpression.getName());
     } else if (expression instanceof IRIdentifier) {
       builder.append(((IRIdentifier) expression).getSymbol().getName());
     } else if (expression instanceof IRInstanceOfExpression) {
