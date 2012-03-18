@@ -1,13 +1,11 @@
+<!doctype html>
 <html>
   <head>
-    <link type="text/css" rel="stylesheet" href="public/styles.css">
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+    <title>Hello GWTsu</title>
+    <script type="text/javascript" language="javascript" src="public/gwttest/gwttest.nocache.js"></script>
   </head>
   <body>
-    <h1><span></span>ronin</h1>
-    <% if(ronin.DevServer.getH2WebURL() != null) { %>
-      <p><a href="${ronin.DevServer.getH2WebURL()}">database</a></p>
-    <% } %>
-    <p><a href="http://ronin-web.org/tutorial.html">tutorial</a></p>
-    <p><a href="http://ronin-web.org/docs.html">docs</a></p>
+    <div id="main"></div>
   </body>
 </html>

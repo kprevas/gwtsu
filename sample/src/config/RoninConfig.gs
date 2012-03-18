@@ -6,10 +6,8 @@ uses ronin.console.*
 
 class RoninConfig extends DefaultRoninConfig {
 
-  /* Set up your RoninConfig as you see fit */
   construct(m : ApplicationMode, an : RoninServlet) {
     super(m, an)
-    //DefaultController = controller.MyDefaultController
     if(m == DEVELOPMENT) {
       AdminConsole.start()
       db.model.Database.JdbcUrl = "jdbc:h2:file:runtime/h2/devdb"
