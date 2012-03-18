@@ -2,6 +2,7 @@ package gwtsu;
 
 import com.google.gwt.thirdparty.guava.common.collect.Lists;
 import com.google.gwt.thirdparty.guava.common.collect.Maps;
+import com.google.gwt.thirdparty.guava.common.collect.Sets;
 import gw.lang.ir.IRAnnotation;
 import gw.lang.ir.IRClass;
 import gw.lang.ir.IRElement;
@@ -62,9 +63,11 @@ import gw.lang.ir.statement.IRWhileStatement;
 import gw.lang.reflect.Modifier;
 import gw.util.GosuClassUtil;
 
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * @author kprevas
@@ -153,6 +156,7 @@ public class GWTSuIRClassCompiler {
     if (method.getName().equals("getIntrinsicType") || method.getName().startsWith("$")) {
       return;
     }
+    Set<String> symbols = Sets.newHashSet();
     for (IRAnnotation annotation : method.getAnnotations()) {
       appendAnnotation(builder, annotation);
     }
@@ -183,7 +187,7 @@ public class GWTSuIRClassCompiler {
       if (!(method.getMethodBody() instanceof IRStatementList)) {
         builder.append("{\n");
       }
-      appendStatement(builder, method.getMethodBody());
+      appendStatement(builder, method.getMethodBody(), symbols);
       if (!(method.getMethodBody() instanceof IRStatementList)) {
         builder.append("}\n");
       }
@@ -192,26 +196,30 @@ public class GWTSuIRClassCompiler {
     }
   }
 
-  private void appendStatement(StringBuilder builder, IRStatement statement) {
+  private void appendStatement(StringBuilder builder, IRStatement statement, Set<String> symbols) {
     if (statement instanceof IRFieldDecl) {
       // TODO kcp
     } else if (statement instanceof IRMethodStatement) {
       // TODO kcp
     } else if (statement instanceof IRArrayStoreStatement) {
       IRArrayStoreStatement arrayStoreStatement = (IRArrayStoreStatement) statement;
-      appendExpression(builder, arrayStoreStatement.getTarget());
+      appendExpression(builder, arrayStoreStatement.getTarget(), symbols);
       builder.append("[");
-      appendExpression(builder, arrayStoreStatement.getIndex());
+      appendExpression(builder, arrayStoreStatement.getIndex(), symbols);
       builder.append("] = ");
-      appendExpression(builder, arrayStoreStatement.getValue());
+      appendExpression(builder, arrayStoreStatement.getValue(), symbols);
       builder.append(";\n");
     } else if (statement instanceof IRAssignmentStatement) {
       IRAssignmentStatement assignmentStatement = (IRAssignmentStatement) statement;
-      builder.append(getTypeName(assignmentStatement.getSymbol().getType()))
-              .append(" ")
-              .append(getSymbolName(assignmentStatement.getSymbol()))
+      String symbolName = getSymbolName(assignmentStatement.getSymbol());
+      if (!symbols.contains(symbolName)) {
+        builder.append(getTypeName(assignmentStatement.getSymbol().getType()))
+                .append(" ");
+        symbols.add(symbolName);
+      }
+      builder.append(symbolName)
               .append(" = ");
-      appendExpression(builder, assignmentStatement.getValue());
+      appendExpression(builder, assignmentStatement.getValue(), symbols);
       builder.append(";\n");
     } else if (statement instanceof IRBreakStatement) {
       builder.append("break;\n");
@@ -220,62 +228,63 @@ public class GWTSuIRClassCompiler {
     } else if (statement instanceof IRDoWhileStatement) {
       IRDoWhileStatement doWhileStatement = (IRDoWhileStatement) statement;
       builder.append("do ");
-      appendStatement(builder, doWhileStatement.getBody());
+      appendStatement(builder, doWhileStatement.getBody(), Sets.newHashSet(symbols));
       builder.append("while(");
-      appendExpression(builder, doWhileStatement.getLoopTest());
+      appendExpression(builder, doWhileStatement.getLoopTest(), symbols);
       builder.append(");\n");
     } else if (statement instanceof IREvalStatement) {
       // TODO kcp
     } else if (statement instanceof IRFieldSetStatement) {
       IRFieldSetStatement fieldSetStatement = (IRFieldSetStatement) statement;
       if (fieldSetStatement.getLhs() != null) {
-        appendExpression(builder, fieldSetStatement.getLhs());
+        appendExpression(builder, fieldSetStatement.getLhs(), symbols);
         builder.append(".");
       }
       builder.append(fieldSetStatement.getName())
               .append(" = ");
-      appendExpression(builder, fieldSetStatement.getRhs());
+      appendExpression(builder, fieldSetStatement.getRhs(), symbols);
       builder.append(";\n");
     } else if (statement instanceof IRForEachStatement) {
       IRForEachStatement forEachStatement = (IRForEachStatement) statement;
+      HashSet<String> innerSymbols = Sets.newHashSet(symbols);
       builder.append("for (");
       List<IRStatement> initializers = forEachStatement.getInitializers();
       for (int i = 0, initializersSize = initializers.size(); i < initializersSize; i++) {
         if (i > 0) {
           builder.append(", ");
         }
-        appendStatement(builder, initializers.get(i));
+        appendStatement(builder, initializers.get(i), innerSymbols);
         if (builder.substring(builder.length() - 2, builder.length()).equals(";\n")) {
           builder.setLength(builder.length() - 2);
         }
       }
       builder.append("; ");
-      appendExpression(builder, forEachStatement.getLoopTest());
+      appendExpression(builder, forEachStatement.getLoopTest(), symbols);
       builder.append("; ");
       List<IRStatement> incrementors = forEachStatement.getIncrementors();
       for (int i = 0, incrementorsSize = incrementors.size(); i < incrementorsSize; i++) {
         if (i > 0) {
           builder.append(", ");
         }
-        appendStatement(builder, incrementors.get(i));
+        appendStatement(builder, incrementors.get(i), innerSymbols);
         if (builder.substring(builder.length() - 2, builder.length()).equals(";\n")) {
           builder.setLength(builder.length() - 2);
         }
       }
       builder.append(") ");
-      appendStatement(builder, forEachStatement.getBody());
+      appendStatement(builder, forEachStatement.getBody(), innerSymbols);
     } else if (statement instanceof IRIfStatement) {
       IRIfStatement ifStatement = (IRIfStatement) statement;
       builder.append("if (");
-      appendExpression(builder, ifStatement.getExpression());
+      appendExpression(builder, ifStatement.getExpression(), symbols);
       builder.append(") ");
-      appendStatement(builder, ifStatement.getIfStatement());
+      appendStatement(builder, ifStatement.getIfStatement(), Sets.newHashSet(symbols));
       if (ifStatement.getElseStatement() != null) {
         builder.append(" else ");
-        appendStatement(builder, ifStatement.getElseStatement());
+        appendStatement(builder, ifStatement.getElseStatement(), Sets.newHashSet(symbols));
       }
     } else if (statement instanceof IRMethodCallStatement) {
-      appendExpression(builder, ((IRMethodCallStatement) statement).getExpression());
+      appendExpression(builder, ((IRMethodCallStatement) statement).getExpression(), symbols);
       builder.append(";\n");
     } else if (statement instanceof IRMonitorLockAcquireStatement) {
       // TODO kcp
@@ -288,13 +297,14 @@ public class GWTSuIRClassCompiler {
       IRReturnStatement returnStatement = (IRReturnStatement) statement;
       if (returnStatement.getReturnValue() != null) {
         builder.append(" ");
-        appendExpression(builder, returnStatement.getReturnValue());
+        appendExpression(builder, returnStatement.getReturnValue(), symbols);
       }
       builder.append(";\n");
     } else if (statement instanceof IRStatementList) {
       builder.append("{\n");
+      HashSet<String> innerSymbols = Sets.newHashSet(symbols);
       for (IRStatement child : ((IRStatementList) statement).getStatements()) {
-        appendStatement(builder, child);
+        appendStatement(builder, child, innerSymbols);
       }
       builder.append("}\n");
     } else if (statement instanceof IRSwitchStatement) {
@@ -303,45 +313,45 @@ public class GWTSuIRClassCompiler {
       // TODO kcp
     } else if (statement instanceof IRThrowStatement) {
       builder.append("throw ");
-      appendExpression(builder, ((IRThrowStatement) statement).getException());
+      appendExpression(builder, ((IRThrowStatement) statement).getException(), symbols);
       builder.append(";\n");
     } else if (statement instanceof IRTryCatchFinallyStatement) {
       builder.append("try ");
       IRTryCatchFinallyStatement tryCatchFinallyStatement = (IRTryCatchFinallyStatement) statement;
-      appendStatement(builder, tryCatchFinallyStatement.getTryBody());
+      appendStatement(builder, tryCatchFinallyStatement.getTryBody(), Sets.newHashSet(symbols));
       for (IRCatchClause catchClause : tryCatchFinallyStatement.getCatchStatements()) {
         builder.append(" catch (")
                 .append(getTypeName(catchClause.getIdentifier().getType()))
                 .append(" ")
                 .append(getSymbolName(catchClause.getIdentifier()))
                 .append(") ");
-        appendStatement(builder, catchClause.getBody());
+        appendStatement(builder, catchClause.getBody(), Sets.newHashSet(symbols));
       }
       if (tryCatchFinallyStatement.getFinallyBody() != null) {
         builder.append(" finally ");
-        appendStatement(builder, tryCatchFinallyStatement.getFinallyBody());
+        appendStatement(builder, tryCatchFinallyStatement.getFinallyBody(), Sets.newHashSet(symbols));
       }
     } else if (statement instanceof IRWhileStatement) {
       builder.append("while (");
       IRWhileStatement whileStatement = (IRWhileStatement) statement;
-      appendExpression(builder, whileStatement.getLoopTest());
+      appendExpression(builder, whileStatement.getLoopTest(), symbols);
       builder.append(") ");
-      appendStatement(builder, whileStatement.getBody());
+      appendStatement(builder, whileStatement.getBody(), Sets.newHashSet(symbols));
     } else {
       throw new IllegalArgumentException("Unknown statement type " + statement.getClass().getSimpleName());
     }
   }
 
-  private void appendExpression(StringBuilder builder, IRExpression expression) {
+  private void appendExpression(StringBuilder builder, IRExpression expression, Set<String> symbols) {
     if (expression instanceof IRArithmeticExpression) {
       IRArithmeticExpression arithmeticExpression = (IRArithmeticExpression) expression;
-      appendExpression(builder, arithmeticExpression.getLhs());
+      appendExpression(builder, arithmeticExpression.getLhs(), symbols);
       builder.append(" ")
               .append(arithmeticExpression.getOp())
               .append(" ");
-      appendExpression(builder, arithmeticExpression.getRhs());
+      appendExpression(builder, arithmeticExpression.getRhs(), symbols);
     } else if (expression instanceof IRArrayLengthExpression) {
-      appendExpression(builder, ((IRArrayLengthExpression) expression).getRoot());
+      appendExpression(builder, ((IRArrayLengthExpression) expression).getRoot(), symbols);
       builder.append(".length");
     } else if (expression instanceof IRArrayLoadExpression) {
       // TODO kcp
@@ -351,7 +361,7 @@ public class GWTSuIRClassCompiler {
       builder.append("((")
               .append(getTypeName(expression.getType()))
               .append(") ");
-      appendExpression(builder, ((IRCastExpression) expression).getRoot());
+      appendExpression(builder, ((IRCastExpression) expression).getRoot(), symbols);
       builder.append(")");
     } else if (expression instanceof IRCharacterLiteral) {
       builder.append("'")
@@ -363,23 +373,23 @@ public class GWTSuIRClassCompiler {
       // TODO kcp
     } else if (expression instanceof IRConditionalAndExpression) {
       IRConditionalAndExpression andExpression = (IRConditionalAndExpression) expression;
-      appendExpression(builder, andExpression.getLhs());
+      appendExpression(builder, andExpression.getLhs(), symbols);
       builder.append(" && ");
-      appendExpression(builder, andExpression.getRhs());
+      appendExpression(builder, andExpression.getRhs(), symbols);
     } else if (expression instanceof IRConditionalOrExpression) {
       IRConditionalOrExpression orExpression = (IRConditionalOrExpression) expression;
-      appendExpression(builder, orExpression.getLhs());
+      appendExpression(builder, orExpression.getLhs(), symbols);
       builder.append(" || ");
-      appendExpression(builder, orExpression.getRhs());
+      appendExpression(builder, orExpression.getRhs(), symbols);
     } else if (expression instanceof IREqualityExpression) {
       IREqualityExpression equalityExpression = (IREqualityExpression) expression;
-      appendExpression(builder, equalityExpression.getLhs());
+      appendExpression(builder, equalityExpression.getLhs(), symbols);
       builder.append(" == ");
-      appendExpression(builder, equalityExpression.getRhs());
+      appendExpression(builder, equalityExpression.getRhs(), symbols);
     } else if (expression instanceof IRFieldGetExpression) {
       IRFieldGetExpression fieldGetExpression = (IRFieldGetExpression) expression;
       if (fieldGetExpression.getLhs() != null) {
-        appendExpression(builder, fieldGetExpression.getLhs());
+        appendExpression(builder, fieldGetExpression.getLhs(), symbols);
         builder.append(".");
       }
       builder.append(fieldGetExpression.getName());
@@ -387,7 +397,7 @@ public class GWTSuIRClassCompiler {
       builder.append(getSymbolName(((IRIdentifier) expression).getSymbol()));
     } else if (expression instanceof IRInstanceOfExpression) {
       IRInstanceOfExpression instanceOfExpression = (IRInstanceOfExpression) expression;
-      appendExpression(builder, instanceOfExpression.getRoot());
+      appendExpression(builder, instanceOfExpression.getRoot(), symbols);
       builder.append(" instanceof ")
               .append(getTypeName(instanceOfExpression.getTestType()));
     } else if (expression instanceof IRMethodCallExpression) {
@@ -412,7 +422,7 @@ public class GWTSuIRClassCompiler {
           }
           skipName = true;
         } else {
-          appendExpression(builder, root);
+          appendExpression(builder, root, symbols);
           builder.append(".");
         }
       } else {
@@ -434,19 +444,19 @@ public class GWTSuIRClassCompiler {
         if (i > 0) {
           builder.append(", ");
         }
-        appendExpression(builder, args.get(i));
+        appendExpression(builder, args.get(i), symbols);
       }
       builder.append(")");
     } else if (expression instanceof IRNegationExpression) {
       builder.append("-");
-      appendExpression(builder, ((IRNegationExpression) expression).getRoot());
+      appendExpression(builder, ((IRNegationExpression) expression).getRoot(), symbols);
     } else if (expression instanceof IRNewArrayExpression) {
       IRNewArrayExpression newArrayExpression = (IRNewArrayExpression) expression;
       builder.append("new ")
               .append(getTypeName(newArrayExpression.getComponentType()))
               .append("[");
       if (newArrayExpression.getSizeExpression() != null) {
-        appendExpression(builder, newArrayExpression.getSizeExpression());
+        appendExpression(builder, newArrayExpression.getSizeExpression(), symbols);
       }
       builder.append("]");
     } else if (expression instanceof IRNewExpression) {
@@ -459,7 +469,7 @@ public class GWTSuIRClassCompiler {
         if (i > 0) {
           builder.append(", ");
         }
-        appendExpression(builder, args.get(i));
+        appendExpression(builder, args.get(i), symbols);
       }
       builder.append(")");
     } else if (expression instanceof IRNewMultiDimensionalArrayExpression) {
@@ -468,12 +478,12 @@ public class GWTSuIRClassCompiler {
               .append(getTypeName(arrayExpression.getResultType()));
       for (IRExpression size : arrayExpression.getSizeExpressions()) {
         builder.append("[");
-        appendExpression(builder, size);
+        appendExpression(builder, size, symbols);
         builder.append("]");
       }
     } else if (expression instanceof IRNotExpression) {
       builder.append("!");
-      appendExpression(builder, ((IRNotExpression) expression).getRoot());
+      appendExpression(builder, ((IRNotExpression) expression).getRoot(), symbols);
     } else if (expression instanceof IRNoOpExpression) {
       // no-op
     } else if (expression instanceof IRNullLiteral) {
@@ -484,22 +494,22 @@ public class GWTSuIRClassCompiler {
       // TODO kcp
     } else if (expression instanceof IRRelationalExpression) {
       IRRelationalExpression relationalExpression = (IRRelationalExpression) expression;
-      appendExpression(builder, relationalExpression.getLhs());
+      appendExpression(builder, relationalExpression.getLhs(), symbols);
       builder.append(" ")
               .append(relationalExpression.getOp())
               .append(" ");
-      appendExpression(builder, relationalExpression.getRhs());
+      appendExpression(builder, relationalExpression.getRhs(), symbols);
     } else if (expression instanceof IRStringLiteralExpression) {
       builder.append("\"")
               .append(((IRStringLiteralExpression) expression).getValue())  // TODO kcp - escape?
               .append("\"");
     } else if (expression instanceof IRTernaryExpression) {
       IRTernaryExpression ternaryExpression = (IRTernaryExpression) expression;
-      appendExpression(builder, ternaryExpression.getTest());
+      appendExpression(builder, ternaryExpression.getTest(), symbols);
       builder.append(" ? ");
-      appendExpression(builder, ternaryExpression.getTrueValue());
+      appendExpression(builder, ternaryExpression.getTrueValue(), symbols);
       builder.append(" : ");
-      appendExpression(builder, ternaryExpression.getFalseValue());
+      appendExpression(builder, ternaryExpression.getFalseValue(), symbols);
     } else {
       throw new IllegalArgumentException("Unknown expression type " + expression.getClass().getSimpleName());
     }
