@@ -40,6 +40,9 @@
           <exclude>**/*.java</exclude>
         </excludes>
       </resource>
+      <resource>
+        <directory>util</directory>
+      </resource>
     </resources>
     <plugins>
       <plugin>

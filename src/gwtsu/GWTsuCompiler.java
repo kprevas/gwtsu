@@ -1,5 +1,7 @@
 package gwtsu;
 
+import com.google.gwt.thirdparty.guava.common.io.Files;
+import com.google.gwt.thirdparty.guava.common.io.InputSupplier;
 import gw.lang.Gosu;
 import gw.lang.ir.IRClass;
 import gw.lang.reflect.IType;
@@ -10,6 +12,8 @@ import gw.util.GosuClassUtil;
 import org.apache.commons.io.FileUtils;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -34,7 +38,7 @@ public class GWTsuCompiler {
     Class<?> classClass = Class.forName("gw.internal.gosu.parser.IGosuClassInternal");
     Method compile = transformerClass.getMethod("compile", classClass);
     for (CharSequence typeName : typeNames) {
-      if (typeName.toString().startsWith("gw.vark.")) {
+      if (typeName.toString().startsWith("gw.vark.") || typeName.toString().startsWith("gwtsu.")) {
         // oh god how did this get here I am not good with computers
         continue;
       }
@@ -56,6 +60,13 @@ public class GWTsuCompiler {
         }
       }
     }
+    File utilFile = new File(gwtsuCache, "Util.java");
+    Files.copy(new InputSupplier<InputStream>() {
+      @Override
+      public InputStream getInput() throws IOException {
+        return GWTsuCompiler.class.getClassLoader().getResourceAsStream("Util.java");
+      }
+    }, utilFile);
     gwtsuCacheUrls[0] = gwtsuCache.toURI().toURL();
     Thread.currentThread().setContextClassLoader(
             new URLClassLoader(gwtsuCacheUrls, Thread.currentThread().getContextClassLoader()));

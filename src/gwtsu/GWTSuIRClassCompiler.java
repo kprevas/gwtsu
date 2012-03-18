@@ -1,6 +1,7 @@
 package gwtsu;
 
 import com.google.gwt.thirdparty.guava.common.collect.Lists;
+import com.google.gwt.thirdparty.guava.common.collect.Maps;
 import gw.lang.ir.IRAnnotation;
 import gw.lang.ir.IRClass;
 import gw.lang.ir.IRElement;
@@ -63,11 +64,20 @@ import gw.util.GosuClassUtil;
 
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 /**
  * @author kprevas
  */
 public class GWTSuIRClassCompiler {
+  
+  private final static Map<String, String> replacementMethods = Maps.newHashMap();
+
+  {
+    replacementMethods.put("gw.internal.gosu.ir.transform.statement.ForEachStatementTransformer.makeIterator",
+            "Util.makeIterator");
+  }
+  
   private IRClass irClass;
 
   public String compileToJava(IRClass irClass) {
@@ -146,27 +156,29 @@ public class GWTSuIRClassCompiler {
     for (IRAnnotation annotation : method.getAnnotations()) {
       appendAnnotation(builder, annotation);
     }
-    builder.append(Modifier.toModifierString(method.getModifiers()))
-            .append(" ");
-    if (method.getName().equals("<init>")) {
-      builder.append(ownerType.getThisType().getRelativeName());
-    } else {
-      builder.append(getTypeName(method.getReturnType()))
-              .append(" ")
-              .append(method.getName());
-    }
-    builder.append("(");
-    List<IRSymbol> parameters = method.getParameters();
-    for (int i = 0, parametersSize = parameters.size(); i < parametersSize; i++) {
-      if (i > 0) {
-        builder.append(", ");
+    if (!method.getName().equals("<clinit>")) {
+      builder.append(Modifier.toModifierString(method.getModifiers()))
+              .append(" ");
+      if (method.getName().equals("<init>")) {
+        builder.append(ownerType.getThisType().getRelativeName());
+      } else {
+        builder.append(getTypeName(method.getReturnType()))
+                .append(" ")
+                .append(method.getName());
       }
-      IRSymbol parameter = parameters.get(i);
-      builder.append(getTypeName(parameter.getType()))
-              .append(" ")
-              .append(getSymbolName(parameter));
+      builder.append("(");
+      List<IRSymbol> parameters = method.getParameters();
+      for (int i = 0, parametersSize = parameters.size(); i < parametersSize; i++) {
+        if (i > 0) {
+          builder.append(", ");
+        }
+        IRSymbol parameter = parameters.get(i);
+        builder.append(getTypeName(parameter.getType()))
+                .append(" ")
+                .append(getSymbolName(parameter));
+      }
+      builder.append(") ");
     }
-    builder.append(") ");
     if (method.getMethodBody() != null) {
       if (!(method.getMethodBody() instanceof IRStatementList)) {
         builder.append("{\n");
@@ -381,6 +393,8 @@ public class GWTSuIRClassCompiler {
     } else if (expression instanceof IRMethodCallExpression) {
       IRMethodCallExpression methodCallExpression = (IRMethodCallExpression) expression;
       boolean skipName = false;
+      String replacement = replacementMethods.get(
+              methodCallExpression.getOwnersType().getName() + "." + methodCallExpression.getName());
       IRExpression root = methodCallExpression.getRoot();
       if (root != null) {
         if (root instanceof IRIdentifier && getSymbolName(((IRIdentifier) root).getSymbol()).equals("this")
@@ -402,14 +416,18 @@ public class GWTSuIRClassCompiler {
           builder.append(".");
         }
       } else {
-        if (!irClass.getThisType().isAssignableFrom(methodCallExpression.getOwnersType())) {
+        if (!irClass.getThisType().isAssignableFrom(methodCallExpression.getOwnersType()) && replacement == null) {
           builder.append(getTypeName(methodCallExpression.getOwnersType()))
                   .append(".");
         }
       }
       if (!skipName) {
-        builder.append(methodCallExpression.getName())
-                .append("(");
+        if (replacement != null) {
+          builder.append(replacement);
+        } else {
+          builder.append(methodCallExpression.getName());
+        }
+        builder.append("(");
       }
       List<IRExpression> args = methodCallExpression.getArgs();
       for (int i = 0, argsSize = args.size(); i < argsSize; i++) {
@@ -487,6 +505,13 @@ public class GWTSuIRClassCompiler {
     }
   }
 
+  private void appendAnnotation(StringBuilder builder, IRAnnotation annotation) {
+    builder.append("@")
+            .append(getTypeName(annotation.getDescriptor()))
+                    // TODO kcp - args?
+            .append("\n");
+  }
+
   private String getSymbolName(IRSymbol symbol) {
     return symbol.getName().replace('*', '$');
   }
@@ -528,10 +553,4 @@ public class GWTSuIRClassCompiler {
     }
   }
 
-  private void appendAnnotation(StringBuilder builder, IRAnnotation annotation) {
-    builder.append("@")
-            .append(getTypeName(annotation.getDescriptor()))
-            // TODO kcp - args?
-            .append("\n");
-  }
 }
