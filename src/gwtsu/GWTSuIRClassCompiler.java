@@ -2,7 +2,6 @@ package gwtsu;
 
 import com.google.gwt.thirdparty.guava.common.collect.Lists;
 import com.google.gwt.thirdparty.guava.common.collect.Maps;
-import com.google.gwt.thirdparty.guava.common.collect.Sets;
 import gw.lang.ir.IRAnnotation;
 import gw.lang.ir.IRClass;
 import gw.lang.ir.IRElement;
@@ -63,12 +62,9 @@ import gw.lang.ir.statement.IRWhileStatement;
 import gw.lang.reflect.Modifier;
 import gw.util.GosuClassUtil;
 
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * @author kprevas
@@ -83,6 +79,8 @@ public class GWTSuIRClassCompiler {
   }
   
   private IRClass irClass;
+  private StringBuilder auxMethodsBuilder = new StringBuilder();
+  private int numAuxMethods = 0;
   
   public GWTSuIRClassCompiler(IRClass irClass) {
     this.irClass = irClass;
@@ -160,7 +158,8 @@ public class GWTSuIRClassCompiler {
     if (method.getName().equals("getIntrinsicType") || method.getName().startsWith("$")) {
       return;
     }
-    Map<String, IRSymbol> symbols = Maps.newHashMap();
+    auxMethodsBuilder.setLength(0);
+    Map<String, IRSymbol> symbols = Maps.newLinkedHashMap();
     for (IRAnnotation annotation : method.getAnnotations()) {
       appendAnnotation(builder, annotation);
     }
@@ -200,6 +199,7 @@ public class GWTSuIRClassCompiler {
     } else {
       builder.append(";\n");
     }
+    builder.append(auxMethodsBuilder);
   }
 
   private void appendStatement(StringBuilder builder, IRStatement statement, Map<String, IRSymbol> symbols) {
@@ -223,12 +223,12 @@ public class GWTSuIRClassCompiler {
       if (!symbols.containsKey(symbolName)) {
         builder.append(getTypeName(assignmentStatement.getSymbol().getType()))
                 .append(" ");
-        symbols.put(symbolName, assignmentStatement.getSymbol());
       }
       builder.append(symbolName)
               .append(" = ");
       appendExpression(builder, assignmentStatement.getValue(), symbols);
       builder.append(";\n");
+      symbols.put(symbolName, assignmentStatement.getSymbol());
     } else if (statement instanceof IRBreakStatement) {
       builder.append("break;\n");
     } else if (statement instanceof IRContinueStatement) {
@@ -392,8 +392,7 @@ public class GWTSuIRClassCompiler {
     } else if (expression instanceof IRClassLiteral) {
       builder.append(getTypeName(((IRClassLiteral) expression).getLiteralType()));
     } else if (expression instanceof IRCompositeExpression) {
-      // TODO kcp
-      builder.append("/* IRCompositeExpression */");
+      transformCompositeExpression(builder, (IRCompositeExpression) expression, symbols);
     } else if (expression instanceof IRConditionalAndExpression) {
       IRConditionalAndExpression andExpression = (IRConditionalAndExpression) expression;
       appendExpression(builder, andExpression.getLhs(), symbols);
@@ -584,6 +583,67 @@ public class GWTSuIRClassCompiler {
       throw new IllegalArgumentException("Unknown primitive type " + type.getName());
     } else {
       return type.getName();
+    }
+  }
+
+  private void transformCompositeExpression(StringBuilder builder, IRCompositeExpression expression, Map<String, IRSymbol> symbols) {
+    if (expression.getElements().size() == 2 &&
+            expression.getElements().get(0) instanceof IRAssignmentStatement &&
+            expression.getElements().get(1) instanceof IRTernaryExpression) {
+      // Null-safe property/method access?
+      IRTernaryExpression ternaryExpression = (IRTernaryExpression) expression.getElements().get(1);
+      if (ternaryExpression.getTrueValue() instanceof IRCastExpression &&
+              ((IRCastExpression) ternaryExpression.getTrueValue()).getRoot() instanceof IRNullLiteral &&
+              ternaryExpression.getTest() instanceof IREqualityExpression &&
+              ((IREqualityExpression) ternaryExpression.getTest()).getRhs() instanceof IRNullLiteral) {
+        IRAssignmentStatement assignmentStatement = (IRAssignmentStatement) expression.getElements().get(0);
+        String rootTypeName = assignmentStatement.getSymbol().getType().getName();
+        String rtnTypeName = ternaryExpression.getResultType().getName();
+        String auxMethodName = " $gwtsu$aux" + (numAuxMethods++);
+        String argName = getSymbolName(assignmentStatement.getSymbol());
+        builder.append(auxMethodName)
+                .append("(");
+        appendExpression(builder, assignmentStatement.getValue(), symbols);
+        appendSymbolsAsArgs(builder, symbols, true);
+        builder.append(")");
+        auxMethodsBuilder.append("private ")
+                .append(rtnTypeName)
+                .append(auxMethodName)
+                .append("(")
+                .append(rootTypeName)
+                .append(" ")
+                .append(argName);
+        appendSymbolsAsParams(auxMethodsBuilder, symbols, true);
+        auxMethodsBuilder.append(") {\n")
+                .append("return ");
+        appendExpression(auxMethodsBuilder, ternaryExpression, symbols);
+        auxMethodsBuilder.append(";\n}\n");
+        return;
+      }
+    }
+    // TODO kcp
+    builder.append("/* IRCompositeExpression */");
+  }
+
+  private void appendSymbolsAsArgs(StringBuilder builder, Map<String, IRSymbol> symbols, boolean comma) {
+    for (Map.Entry<String, IRSymbol> symbol : symbols.entrySet()) {
+      if (comma) {
+        builder.append(", ");
+      }
+      comma = true;
+      builder.append(symbol.getKey());
+    }
+  }
+
+  private void appendSymbolsAsParams(StringBuilder builder, Map<String, IRSymbol> symbols, boolean comma) {
+    for (Map.Entry<String, IRSymbol> symbol : symbols.entrySet()) {
+      if (comma) {
+        builder.append(", ");
+      }
+      comma = true;
+      builder.append(symbol.getValue().getType().getName())
+              .append(" ")
+              .append(symbol.getKey());
     }
   }
 
