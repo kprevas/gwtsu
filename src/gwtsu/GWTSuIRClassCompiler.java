@@ -65,6 +65,7 @@ import gw.util.GosuClassUtil;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Stack;
 
 /**
  * @author kprevas
@@ -79,7 +80,7 @@ public class GWTSuIRClassCompiler {
   }
   
   private IRClass irClass;
-  private StringBuilder auxMethodsBuilder = new StringBuilder();
+  private Stack<StringBuilder> auxMethodsBuilders = new Stack<StringBuilder>();
   private int numAuxMethods = 0;
   
   public GWTSuIRClassCompiler(IRClass irClass) {
@@ -158,7 +159,6 @@ public class GWTSuIRClassCompiler {
     if (method.getName().equals("getIntrinsicType") || method.getName().startsWith("$")) {
       return;
     }
-    auxMethodsBuilder.setLength(0);
     Map<String, IRSymbol> symbols = Maps.newLinkedHashMap();
     for (IRAnnotation annotation : method.getAnnotations()) {
       appendAnnotation(builder, annotation);
@@ -199,7 +199,9 @@ public class GWTSuIRClassCompiler {
     } else {
       builder.append(";\n");
     }
-    builder.append(auxMethodsBuilder);
+    while (!auxMethodsBuilders.empty()) {
+      builder.append(auxMethodsBuilders.pop());
+    }
   }
 
   private void appendStatement(StringBuilder builder, IRStatement statement, Map<String, IRSymbol> symbols) {
@@ -426,7 +428,7 @@ public class GWTSuIRClassCompiler {
       IRMethodCallExpression methodCallExpression = (IRMethodCallExpression) expression;
       boolean skipName = false;
       String replacement = replacementMethods.get(
-              methodCallExpression.getOwnersType().getName() + "." + methodCallExpression.getName());
+              getTypeName(methodCallExpression.getOwnersType()) + "." + methodCallExpression.getName());
       IRExpression root = methodCallExpression.getRoot();
       if (root != null) {
         if (root instanceof IRIdentifier && getSymbolName(((IRIdentifier) root).getSymbol()).equals("this")
@@ -587,6 +589,8 @@ public class GWTSuIRClassCompiler {
   }
 
   private void transformCompositeExpression(StringBuilder builder, IRCompositeExpression expression, Map<String, IRSymbol> symbols) {
+    StringBuilder auxMethodsBuilder = new StringBuilder();
+    auxMethodsBuilders.push(auxMethodsBuilder);
     if (expression.getElements().size() == 2 &&
             expression.getElements().get(0) instanceof IRAssignmentStatement &&
             expression.getElements().get(1) instanceof IRTernaryExpression) {
@@ -597,9 +601,9 @@ public class GWTSuIRClassCompiler {
               ternaryExpression.getTest() instanceof IREqualityExpression &&
               ((IREqualityExpression) ternaryExpression.getTest()).getRhs() instanceof IRNullLiteral) {
         IRAssignmentStatement assignmentStatement = (IRAssignmentStatement) expression.getElements().get(0);
-        String rootTypeName = assignmentStatement.getSymbol().getType().getName();
-        String rtnTypeName = ternaryExpression.getResultType().getName();
-        String auxMethodName = " $gwtsu$aux" + (numAuxMethods++);
+        String rootTypeName = getTypeName(assignmentStatement.getSymbol().getType());
+        String rtnTypeName = getTypeName(ternaryExpression.getResultType());
+        String auxMethodName = "$gwtsu$aux" + (numAuxMethods++);
         String argName = getSymbolName(assignmentStatement.getSymbol());
         builder.append(auxMethodName)
                 .append("(");
@@ -621,8 +625,42 @@ public class GWTSuIRClassCompiler {
         return;
       }
     }
+    // TODO kcp - check for other types of known composite expressions
+    // Fallback: if elements are statements + 1 expression, transform directly into aux method.
+    IRElement lastElement = expression.getElements().get(expression.getElements().size() - 1);
+    if (lastElement instanceof IRExpression) {
+      boolean areAllStatements = true;
+      for (IRElement element : expression.getElements()) {
+        areAllStatements = areAllStatements && (element instanceof IRStatement || element == lastElement);
+      }
+      if (areAllStatements) {
+        String auxMethodName = "$gwtsu$aux" + (numAuxMethods++);
+        builder.append(auxMethodName)
+                .append("(");
+        appendSymbolsAsArgs(builder, symbols, false);
+        builder.append(")");
+        auxMethodsBuilder.append("private ")
+                .append(getTypeName(((IRExpression) lastElement).getType()))
+                .append(" ")
+                .append(auxMethodName)
+                .append("(");
+        appendSymbolsAsParams(auxMethodsBuilder, symbols, false);
+        auxMethodsBuilder.append(") {\n");
+        for (IRElement element : expression.getElements()) {
+          if (element instanceof IRStatement) {
+            appendStatement(auxMethodsBuilder, (IRStatement) element, symbols);
+          } else {
+            auxMethodsBuilder.append("return ");
+            appendExpression(auxMethodsBuilder, (IRExpression) element, symbols);
+            auxMethodsBuilder.append(";\n");
+          }
+        }
+        auxMethodsBuilder.append("}\n");
+        return;
+      }
+    }
     // TODO kcp
-    builder.append("/* IRCompositeExpression */");
+    builder.append("/* unknown IRCompositeExpression */");
   }
 
   private void appendSymbolsAsArgs(StringBuilder builder, Map<String, IRSymbol> symbols, boolean comma) {
@@ -641,7 +679,7 @@ public class GWTSuIRClassCompiler {
         builder.append(", ");
       }
       comma = true;
-      builder.append(symbol.getValue().getType().getName())
+      builder.append(getTypeName(symbol.getValue().getType()))
               .append(" ")
               .append(symbol.getKey());
     }
