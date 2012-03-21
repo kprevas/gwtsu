@@ -81,18 +81,6 @@
       <version>0.9.5-3</version>
       <scope>test</scope>
     </dependency>
-    <dependency>
-      <groupId>org.seleniumhq.selenium</groupId>
-      <artifactId>selenium-java</artifactId>
-      <version>2.16.1</version>
-      <exclusions>
-        <exclusion>
-          <groupId>org.seleniumhq.selenium</groupId>
-          <artifactId>servlet-api-2.5</artifactId>
-        </exclusion>
-      </exclusions>
-      <scope>test</scope>
-    </dependency>
   </dependencies>
 
   <build>
