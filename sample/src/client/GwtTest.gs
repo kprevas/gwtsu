@@ -10,7 +10,7 @@ class GwtTest implements EntryPoint {
    * This is the entry point method.
    */
   function onModuleLoad() {
-    var label = new Label("Hello GWTsu")
+    var label = new Label(new OtherClientClass().Label)
     RootPanel.get("main").add(label)
   }
 }
