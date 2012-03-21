@@ -60,6 +60,7 @@ import gw.lang.ir.statement.IRThrowStatement;
 import gw.lang.ir.statement.IRTryCatchFinallyStatement;
 import gw.lang.ir.statement.IRWhileStatement;
 import gw.lang.reflect.Modifier;
+import gw.lang.reflect.TypeSystem;
 import gw.util.GosuClassUtil;
 
 import java.util.Iterator;
@@ -74,7 +75,7 @@ public class GWTSuIRClassCompiler {
   
   private final static Map<String, String> replacementMethods = Maps.newHashMap();
 
-  {
+  static {
     replacementMethods.put("gw.internal.gosu.ir.transform.statement.ForEachStatementTransformer.makeIterator",
             "Util.makeIterator");
   }
@@ -82,7 +83,8 @@ public class GWTSuIRClassCompiler {
   private IRClass irClass;
   private Stack<StringBuilder> auxMethodsBuilders = new Stack<StringBuilder>();
   private int numAuxMethods = 0;
-  
+  private boolean isOverlay;
+
   public GWTSuIRClassCompiler(IRClass irClass) {
     this.irClass = irClass;
   }
@@ -108,9 +110,15 @@ public class GWTSuIRClassCompiler {
       builder.append(" class ");
     }
     builder.append(irClass.getThisType().getRelativeName());
-    if (irClass.getSuperType() != null) {
-      builder.append(" extends ")
-              .append(getTypeName(irClass.getSuperType()));
+    IRType superType = irClass.getSuperType();
+    if (superType != null) {
+      if (getTypeName(superType).equals("gwtsu.JSONOverlay")) {
+        isOverlay = true;
+        builder.append(" extends com.google.gwt.core.client.JavaScriptObject");
+      } else {
+        builder.append(" extends ")
+                .append(getTypeName(superType));
+      }
     }
     List<IRType> interfaces = Lists.newArrayList(irClass.getInterfaces());
     Iterator<IRType> iterator = interfaces.iterator();
@@ -159,6 +167,58 @@ public class GWTSuIRClassCompiler {
     if (method.getName().equals("getIntrinsicType") || method.getName().startsWith("$")) {
       return;
     }
+    IRStatement methodBody = method.getMethodBody();
+    if (isOverlay) {
+      if (method.getName().startsWith("get") && method.getParameters().isEmpty()) {
+        if (methodBody instanceof IRStatementList) {
+          List<IRStatement> statements = ((IRStatementList) methodBody).getStatements();
+          if (statements.size() == 1 && statements.get(0) instanceof IRReturnStatement) {
+            IRExpression returnValue = ((IRReturnStatement) statements.get(0)).getReturnValue();
+            if (returnValue instanceof IRFieldGetExpression) {
+              builder.append("public final native ")
+                      .append(getTypeName(((IRFieldGetExpression) returnValue).getFieldType()))
+                      .append(" ")
+                      .append(method.getName())
+                      .append("() /*-{ return this.")
+                      .append(method.getName().substring("get".length()))
+                      .append("; }-*/;\n");
+              return;
+            }
+          }
+        }
+      }
+      if (method.getName().startsWith("set") 
+              && method.getReturnType().isVoid() 
+              && method.getParameters().size() == 1) {
+        if (methodBody instanceof IRStatementList) {
+          List<IRStatement> statements = ((IRStatementList) methodBody).getStatements();
+          if (statements.size() == 2
+                  && statements.get(0) instanceof IRFieldSetStatement
+                  && statements.get(1) instanceof IRReturnStatement) {
+            builder.append("public final native void ")
+                    .append(method.getName())
+                    .append("(")
+                    .append(getTypeName(method.getParameters().get(0).getType()))
+                    .append(" ")
+                    .append(method.getParameters().get(0).getName())
+                    .append(") /*-{ this.")
+                    .append(method.getName().substring("set".length()))
+                    .append(" = ")
+                    .append(method.getParameters().get(0).getName())
+                    .append("; }-*/;\n");
+            return;
+          }
+        }
+      }
+      if (method.getName().equals("<init>") 
+              && method.getParameters().size() == 1
+              && method.getParameters().get(0).getType().getName().equals("java.lang.String")) {
+        builder.append("public static native ")
+                .append(getTypeName(irClass.getThisType()))
+                .append(" $gwtsu$parse(json : String) /*-{ return JSON.parse(json); }-*/;\n");
+        return;
+      }
+    }
     Map<String, IRSymbol> symbols = Maps.newLinkedHashMap();
     for (IRAnnotation annotation : method.getAnnotations()) {
       appendAnnotation(builder, annotation);
@@ -188,12 +248,12 @@ public class GWTSuIRClassCompiler {
       }
       builder.append(") ");
     }
-    if (method.getMethodBody() != null) {
-      if (!(method.getMethodBody() instanceof IRStatementList)) {
+    if (methodBody != null) {
+      if (!(methodBody instanceof IRStatementList)) {
         builder.append("{\n");
       }
-      appendStatement(builder, method.getMethodBody(), symbols);
-      if (!(method.getMethodBody() instanceof IRStatementList)) {
+      appendStatement(builder, methodBody, symbols);
+      if (!(methodBody instanceof IRStatementList)) {
         builder.append("}\n");
       }
     } else {
@@ -325,7 +385,9 @@ public class GWTSuIRClassCompiler {
       builder.append("{\n");
       Map<String, IRSymbol> innerSymbols = Maps.newHashMap(symbols);
       for (IRStatement child : ((IRStatementList) statement).getStatements()) {
-        appendStatement(builder, child, innerSymbols);
+        if (child != null) {
+          appendStatement(builder, child, innerSymbols);
+        }
       }
       builder.append("}\n");
     } else if (statement instanceof IRSwitchStatement) {
@@ -485,17 +547,27 @@ public class GWTSuIRClassCompiler {
       builder.append("]");
     } else if (expression instanceof IRNewExpression) {
       IRNewExpression newExpression = (IRNewExpression) expression;
-      builder.append("new ")
-              .append(getTypeName(newExpression.getOwnersType()))
-              .append("(");
       List<IRExpression> args = newExpression.getArgs();
-      for (int i = 0, argsSize = args.size(); i < argsSize; i++) {
-        if (i > 0) {
-          builder.append(", ");
+      if (TypeSystem.getByFullName("gwtsu.JSONOverlay")
+              .isAssignableFrom(newExpression.getOwnersType().getType()) &&
+              args.size() == 1 &&
+              args.get(0).getType().getName().equals("java.lang.String")) {
+        builder.append(getTypeName(newExpression.getOwnersType()))
+            .append(".$gwtsu$parse(");
+        appendExpression(builder, args.get(0), symbols);
+        builder.append(")");
+      } else {
+        builder.append("new ")
+                .append(getTypeName(newExpression.getOwnersType()))
+                .append("(");
+        for (int i = 0, argsSize = args.size(); i < argsSize; i++) {
+          if (i > 0) {
+            builder.append(", ");
+          }
+          appendExpression(builder, args.get(i), symbols);
         }
-        appendExpression(builder, args.get(i), symbols);
+        builder.append(")");
       }
-      builder.append(")");
     } else if (expression instanceof IRNewMultiDimensionalArrayExpression) {
       IRNewMultiDimensionalArrayExpression arrayExpression = (IRNewMultiDimensionalArrayExpression) expression;
       builder.append("new ")

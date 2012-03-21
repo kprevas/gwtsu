@@ -72,6 +72,9 @@ public class GWTsuCompiler {
           File javaFile = new File(dir, GosuClassUtil.getNameNoPackage(type.getName()) + ".java");
           if (!javaFile.exists() ||
                   javaFile.lastModified() < ((IGosuClass) type).getSourceFileHandle().getFileTimestamp()) {
+            if (javaFile.exists()) {
+              javaFile.delete();
+            }
             IRClass irClass = (IRClass) compile.invoke(null, type);
             String javaSource = new GWTSuIRClassCompiler(irClass).compileToJava();
             dir.mkdirs();
@@ -97,11 +100,20 @@ public class GWTsuCompiler {
   }
 
   private static void findReferencedTypes(IGosuClass gsClass, Set<IGosuClass> gosuClasses) {
+    if (gsClass.getName().startsWith("gwtsu.") || gosuClasses.contains(gsClass)) {
+      return;
+    }
     gosuClasses.add(gsClass);
-    gsClass.getBackingClass();
+    try {
+      gsClass.getBackingClass();
+    } catch (Exception e) {
+      System.err.println(gsClass.getName() + " could not be compiled.");
+      e.printStackTrace();
+    }
     gsClass = TypeSystem.getPureGenericType(gsClass);
     if (!gsClass.isValid()) {
       System.err.println(gsClass.getName() + " has errors.");
+      gsClass.getParseResultsException().printStackTrace();
       return;
     }
 
