@@ -9,7 +9,7 @@ enhancement GWTsuVarkTargets : gw.vark.AardvarkFile {
   @Target
   function gwtCompile(modules : String) {
     Ant.java(
-        :args = "-war html/public -deploy html/WEB-INF ${modules}",
+        :args = "-war html/public -deploy html/WEB-INF -strict ${modules}",
         :jvmargs = "-Xmx1024m -Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=5005",
         :classname = "gwtsu.GWTsuCompiler",
         :classpath = this.classpath(this.file("src"))

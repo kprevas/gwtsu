@@ -59,8 +59,10 @@ import gw.lang.ir.statement.IRSyntheticStatement;
 import gw.lang.ir.statement.IRThrowStatement;
 import gw.lang.ir.statement.IRTryCatchFinallyStatement;
 import gw.lang.ir.statement.IRWhileStatement;
+import gw.lang.reflect.IType;
 import gw.lang.reflect.Modifier;
 import gw.lang.reflect.TypeSystem;
+import gw.lang.reflect.gs.IGosuClass;
 import gw.util.GosuClassUtil;
 
 import java.util.Iterator;
@@ -92,7 +94,7 @@ public class GWTSuIRClassCompiler {
   public String compileToJava() {
     StringBuilder builder = new StringBuilder();
     builder.append("package ")
-            .append(GosuClassUtil.getPackage(irClass.getName()))
+            .append(GosuClassUtil.getPackage(getTypeName(irClass.getThisType())))
             .append(";\n");
     appendClass(builder);
     return builder.toString();
@@ -109,7 +111,8 @@ public class GWTSuIRClassCompiler {
     } else {
       builder.append(" class ");
     }
-    builder.append(irClass.getThisType().getRelativeName());
+    String typeName = getTypeName(irClass.getThisType());
+    builder.append(typeName.substring(typeName.lastIndexOf(".") + 1));
     IRType superType = irClass.getSuperType();
     if (superType != null) {
       if (getTypeName(superType).equals("gwtsu.JSONOverlay")) {
@@ -138,9 +141,6 @@ public class GWTSuIRClassCompiler {
       }
     }
     builder.append(" {\n");
-//    for (IRClass.InnerClassInfo innerClassInfo : irClass.getInnerClasses()) {
-//      appendClass(builder, innerClassInfo.getInnerClass());
-//    }
     for (IRFieldDecl field : irClass.getFields()) {
       appendField(builder, field);
     }
@@ -227,7 +227,7 @@ public class GWTSuIRClassCompiler {
       builder.append(Modifier.toModifierString(method.getModifiers()))
               .append(" ");
       if (method.getName().equals("<init>")) {
-        builder.append(ownerType.getThisType().getRelativeName());
+        builder.append(GosuClassUtil.getNameNoPackage(getTypeName(ownerType.getThisType())));
       } else {
         builder.append(getTypeName(method.getReturnType()))
                 .append(" ")
@@ -624,40 +624,11 @@ public class GWTSuIRClassCompiler {
   }
 
   private String getTypeName(IRType type) {
-    if (type.isArray()) {
-      return getTypeName(type.getComponentType()) + "[]";
-    } else if (type.isPrimitive()) {
-      if (type.isBoolean()) {
-        return "boolean";
-      }
-      if (type.isByte()) {
-        return "byte";
-      }
-      if (type.isChar()) {
-        return "char";
-      }
-      if (type.isDouble()) {
-        return "double";
-      }
-      if (type.isFloat()) {
-        return "float";
-      }
-      if (type.isInt()) {
-        return "int";
-      }
-      if (type.isLong()) {
-        return "long";
-      }
-      if (type.isShort()) {
-        return "short";
-      }
-      if (type.isVoid()) {
-        return "void";
-      }
-      throw new IllegalArgumentException("Unknown primitive type " + type.getName());
-    } else {
-      return type.getName();
+    IType iType = type.getType();
+    if (iType instanceof IGosuClass) {
+      return ((IGosuClass) iType).getBackingClass().getName();
     }
+    return iType.getName();
   }
 
   private void transformCompositeExpression(StringBuilder builder, IRCompositeExpression expression, Map<String, IRSymbol> symbols) {

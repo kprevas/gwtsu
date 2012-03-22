@@ -1,9 +1,9 @@
 package gwtsu;
 
 import com.google.gwt.core.ext.TreeLogger;
+import com.google.gwt.core.ext.UnableToCompleteException;
 import com.google.gwt.dev.cfg.ModuleDef;
 import com.google.gwt.dev.cfg.ModuleDefLoader;
-import com.google.gwt.thirdparty.guava.common.collect.Lists;
 import com.google.gwt.thirdparty.guava.common.collect.Sets;
 import com.google.gwt.thirdparty.guava.common.io.Files;
 import com.google.gwt.thirdparty.guava.common.io.InputSupplier;
@@ -39,19 +39,19 @@ public class GWTsuCompiler {
     File gwtsuCache = new File("gwtsu-cache");
     Gosu.init(Arrays.asList(new File("src")));
 
-    List<String> modules = Lists.newArrayList();
     Set<String> entryPoints = Sets.newHashSet();
-    for (int i = 0; i < args.length; i++) {
+    for (int i = args.length - 1; i >= 0; i--) {
       String arg = args[i];
       if (arg.startsWith("-")) {
-        i++;
+        break;
       } else {
-        modules.add(arg);
+        try {
+          ModuleDef moduleDef = ModuleDefLoader.loadFromClassPath(TreeLogger.NULL, args[i]);
+          entryPoints.addAll(Arrays.asList(moduleDef.getEntryPointTypeNames()));
+        } catch (UnableToCompleteException e) {
+          break;
+        }
       }
-    }
-    for (String module : modules) {
-      ModuleDef moduleDef = ModuleDefLoader.loadFromClassPath(TreeLogger.NULL, module);
-      entryPoints.addAll(Arrays.asList(moduleDef.getEntryPointTypeNames()));
     }
 
     Set<IGosuClass> gosuClasses = Sets.newHashSet();
@@ -67,11 +67,12 @@ public class GWTsuCompiler {
     for (IGosuClass type : gosuClasses) {
       if (type instanceof IGosuClass) {
         try {
-          String packageName = GosuClassUtil.getPackage(type.getName());
+          String name = type.getBackingClass().getName();
+          String packageName = GosuClassUtil.getPackage(name);
           File dir = new File(gwtsuCache, packageName.replace('.', File.separatorChar));
-          File javaFile = new File(dir, GosuClassUtil.getNameNoPackage(type.getName()) + ".java");
+          File javaFile = new File(dir, name.substring(packageName.length() + 1) + ".java");
           if (!javaFile.exists() ||
-                  javaFile.lastModified() < ((IGosuClass) type).getSourceFileHandle().getFileTimestamp()) {
+                  javaFile.lastModified() < type.getSourceFileHandle().getFileTimestamp()) {
             if (javaFile.exists()) {
               javaFile.delete();
             }
