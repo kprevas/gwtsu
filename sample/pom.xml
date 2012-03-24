@@ -31,6 +31,11 @@
       <scope>provided</scope>
     </dependency>
     <dependency>
+      <groupId>org.gosu-lang.gwtsu</groupId>
+      <artifactId>gwtsu-json</artifactId>
+      <version>0.1-SNAPSHOT</version>
+    </dependency>
+    <dependency>
       <groupId>org.gosu-lang.ronin</groupId>
       <artifactId>ronin-log</artifactId>
       <version>0.9.5-3</version>

@@ -4,11 +4,27 @@ uses gw.util.GosuEscapeUtil
 uses java.lang.Iterable
 uses java.lang.StringBuilder
 
-enhancement JSONOverlayEnhx : JSONOverlay {
+/**
+ * Superclass for JSON overlay objects.
+ */
+abstract class JSONOverlay {
 
-  function overlayToJSON() : String {
+  construct() {}
+
+  /**
+   * In order to work client-side, subclasses must define a constructor matching this signature exactly.
+   */
+  construct(json : String) {
+    throw "This constructor should never be invoked server-side."
+  }
+
+  final function overlayToJSON() : String {
     var json = new StringBuilder("{")
-    for (prop in this.Type.TypeInfo.Properties) {
+    for (prop in (typeof this).TypeInfo.Properties index i) {
+      if (prop.Name == "IntrinsicType") continue;
+      if (json.length() > 1) {
+        json.append(",")
+      }
       json.append("\"").append(prop.Name).append("\":")
       var value = prop.Accessor.getValue(this)
       appendValue(value, json)
@@ -31,7 +47,7 @@ enhancement JSONOverlayEnhx : JSONOverlay {
       json.append("]")
     } else if ((typeof value).Array) {
       json.append("[")
-      for (child in value index i) {
+      for (child in (value as Object[]) index i) {
         if (i > 0) {
           json.append(",")
         }
@@ -53,5 +69,4 @@ enhancement JSONOverlayEnhx : JSONOverlay {
           .append("\"")
     }
   }
-
 }

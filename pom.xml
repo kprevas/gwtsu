@@ -1,71 +1,45 @@
 <project>
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.gosu-lang.gwtsu</groupId>
-  <artifactId>gwtsu</artifactId>
+  <artifactId>gwtsu-proj</artifactId>
   <version>0.1-SNAPSHOT</version>
-  <name>GWTsu</name>
+  <packaging>pom</packaging>
+  <name>GWTsu parent project</name>
   <parent>
     <groupId>org.gosu-lang</groupId>
     <artifactId>gosu-project-parent</artifactId>
     <version>4</version>
   </parent>
-  <dependencies>
-    <dependency>
-      <groupId>com.google.gwt</groupId>
-      <artifactId>gwt-dev</artifactId>
-      <version>2.4.0</version>
-    </dependency>
-    <dependency>
-      <groupId>com.google.gwt</groupId>
-      <artifactId>gwt-user</artifactId>
-      <version>2.4.0</version>
-    </dependency>
-    <dependency>
-      <groupId>org.gosu-lang.gosu</groupId>
-      <artifactId>gosu-core-api</artifactId>
-      <version>0.9-12</version>
-    </dependency>
-    <dependency>
-      <groupId>org.gosu-lang.aardvark</groupId>
-      <artifactId>aardvark</artifactId>
-      <version>0.4-SNAPSHOT</version>
-    </dependency>
-  </dependencies>
+
+  <repositories>
+    <repository>
+      <id>gosu-lang.org-releases</id>
+      <name>Official Gosu website (releases)</name>
+      <url>http://gosu-lang.org/nexus/content/groups/releases</url>
+    </repository>
+  </repositories>
+
+  <scm>
+    <connection>scm:git:git@github.com:kprevas/gwtsu.git</connection>
+    <url>scm:git:git@github.com:kprevas/gwtsu.git</url>
+    <developerConnection>scm:git:git@github.com:kprevas/gwtsu.git</developerConnection>
+  </scm>
+
   <build>
-    <sourceDirectory>src</sourceDirectory>
-    <resources>
-      <resource>
-        <directory>src</directory>
-        <excludes>
-          <exclude>**/*.java</exclude>
-        </excludes>
-      </resource>
-      <resource>
-        <directory>util</directory>
-      </resource>
-    </resources>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-jar-plugin</artifactId>
+        <artifactId>maven-release-plugin</artifactId>
+        <version>2.2.2</version>
         <configuration>
-          <archive>
-            <manifest>
-              <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
-            </manifest>
-            <manifestEntries>
-              <Contains-Sources>gs, gsx, gst</Contains-Sources>
-            </manifestEntries>
-          </archive>
-        </configuration>
-      </plugin>
-      <plugin>
-        <groupId>org.gosu-lang</groupId>
-        <artifactId>maven-gosu-plugin</artifactId>
-        <configuration>
-          <gosuVersion>0.9-12</gosuVersion>
+          <autoVersionSubmodules>true</autoVersionSubmodules>
         </configuration>
       </plugin>
     </plugins>
   </build>
+
+  <modules>
+    <module>compiler</module>
+    <module>json</module>
+  </modules>
 </project>
