@@ -866,13 +866,13 @@ public class IRClassCompiler {
   }
 
   private String getSymbolName(IRSymbol symbol) {
-    return symbol.getName().replace('*', '$');
+    return symbol.getName().replace("*", "gwtsu$");
   }
 
   private String getTypeName(IRType type) {
     IType iType = type.getType();
     if (iType instanceof IGosuClass) {
-      return ((IGosuClass) iType).getBackingClass().getName();
+      return ((IGosuClass) iType).getBackingClass().getName().replace("$", "__");
     }
     return iType.getName();
   }

@@ -82,7 +82,7 @@ public class GWTsuCompiler {
     }
     for (IGosuClass type : gosuClasses) {
       try {
-        String name = type.getBackingClass().getName();
+        String name = type.getBackingClass().getName().replace("$", "__");
         String packageName = GosuClassUtil.getPackage(name);
         File dir = new File(gwtsuCache, packageName.replace('.', File.separatorChar));
         File javaFile = new File(dir, name.substring(packageName.length() + 1) + ".java");
