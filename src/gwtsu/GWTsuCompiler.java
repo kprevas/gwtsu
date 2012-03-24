@@ -4,6 +4,7 @@ import com.google.gwt.core.ext.TreeLogger;
 import com.google.gwt.core.ext.UnableToCompleteException;
 import com.google.gwt.dev.cfg.ModuleDef;
 import com.google.gwt.dev.cfg.ModuleDefLoader;
+import com.google.gwt.thirdparty.guava.common.collect.Maps;
 import com.google.gwt.thirdparty.guava.common.collect.Sets;
 import com.google.gwt.thirdparty.guava.common.io.Files;
 import com.google.gwt.thirdparty.guava.common.io.InputSupplier;
@@ -26,7 +27,10 @@ import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+
+import static gwtsu.CheckedExceptionAnalyzer.ExceptionMap;
 
 /**
  * @author kprevas
@@ -64,26 +68,36 @@ public class GWTsuCompiler {
     Class<?> transformerClass = Class.forName("gw.internal.gosu.ir.transform.GosuClassTransformer");
     Class<?> classClass = Class.forName("gw.internal.gosu.parser.IGosuClassInternal");
     Method compile = transformerClass.getMethod("compile", classClass);
+    Map<IGosuClass, IRClass> compiledClasses = Maps.newHashMap();
+    ExceptionMap exceptionMap = new ExceptionMap();
     for (IGosuClass type : gosuClasses) {
-      if (type instanceof IGosuClass) {
-        try {
-          String name = type.getBackingClass().getName();
-          String packageName = GosuClassUtil.getPackage(name);
-          File dir = new File(gwtsuCache, packageName.replace('.', File.separatorChar));
-          File javaFile = new File(dir, name.substring(packageName.length() + 1) + ".java");
-          if (!javaFile.exists() ||
-                  javaFile.lastModified() < type.getSourceFileHandle().getFileTimestamp()) {
-            if (javaFile.exists()) {
-              javaFile.delete();
-            }
-            IRClass irClass = (IRClass) compile.invoke(null, type);
-            String javaSource = new GWTSuIRClassCompiler(irClass).compileToJava();
-            dir.mkdirs();
-            FileUtils.writeStringToFile(javaFile, javaSource);
+      try {
+        compiledClasses.put(type, (IRClass) compile.invoke(null, type));
+      } catch (Throwable t) {
+        t.printStackTrace();
+      }
+    }
+    for (IGosuClass type : gosuClasses) {
+      CheckedExceptionAnalyzer.findCheckedExceptions(type, exceptionMap, compiledClasses);
+    }
+    for (IGosuClass type : gosuClasses) {
+      try {
+        String name = type.getBackingClass().getName();
+        String packageName = GosuClassUtil.getPackage(name);
+        File dir = new File(gwtsuCache, packageName.replace('.', File.separatorChar));
+        File javaFile = new File(dir, name.substring(packageName.length() + 1) + ".java");
+        if (!javaFile.exists() ||
+                javaFile.lastModified() < type.getSourceFileHandle().getFileTimestamp()) {
+          if (javaFile.exists()) {
+            javaFile.delete();
           }
-        } catch (Throwable t) {
-          t.printStackTrace();
+          IRClass irClass = (IRClass) compile.invoke(null, type);
+          String javaSource = new IRClassCompiler(irClass, exceptionMap).compileToJava();
+          dir.mkdirs();
+          FileUtils.writeStringToFile(javaFile, javaSource);
         }
+      } catch (Throwable t) {
+        t.printStackTrace();
       }
     }
     File utilFile = new File(gwtsuCache, "Util.java");

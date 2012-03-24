@@ -2,6 +2,7 @@ package gwtsu;
 
 import com.google.gwt.thirdparty.guava.common.collect.Lists;
 import com.google.gwt.thirdparty.guava.common.collect.Maps;
+import com.google.gwt.thirdparty.guava.common.collect.Sets;
 import gw.lang.ir.IRAnnotation;
 import gw.lang.ir.IRClass;
 import gw.lang.ir.IRElement;
@@ -63,17 +64,23 @@ import gw.lang.reflect.IType;
 import gw.lang.reflect.Modifier;
 import gw.lang.reflect.TypeSystem;
 import gw.lang.reflect.gs.IGosuClass;
+import gw.lang.reflect.java.IJavaType;
 import gw.util.GosuClassUtil;
 
+import java.lang.reflect.Method;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.Stack;
+
+import static gwtsu.CheckedExceptionAnalyzer.ExceptionMap;
+import static gwtsu.CheckedExceptionAnalyzer.getMethodInfoFromSymbols;
 
 /**
  * @author kprevas
  */
-public class GWTSuIRClassCompiler {
+public class IRClassCompiler {
   
   private final static Map<String, String> replacementMethods = Maps.newHashMap();
 
@@ -83,12 +90,15 @@ public class GWTSuIRClassCompiler {
   }
   
   private IRClass irClass;
+  private ExceptionMap exceptionMap;
   private Stack<StringBuilder> auxMethodsBuilders = new Stack<StringBuilder>();
-  private int numAuxMethods = 0;
+  private Set<IRMethodStatement> ctors = Sets.newHashSet();
+  private int uid = 0;
   private boolean isOverlay;
 
-  public GWTSuIRClassCompiler(IRClass irClass) {
+  public IRClassCompiler(IRClass irClass, ExceptionMap exceptionMap) {
     this.irClass = irClass;
+    this.exceptionMap = exceptionMap;
   }
 
   public String compileToJava() {
@@ -111,8 +121,8 @@ public class GWTSuIRClassCompiler {
     } else {
       builder.append(" class ");
     }
-    String typeName = getTypeName(irClass.getThisType());
-    builder.append(typeName.substring(typeName.lastIndexOf(".") + 1));
+    String relativeName = getRelativeClassName();
+    builder.append(relativeName);
     IRType superType = irClass.getSuperType();
     if (superType != null) {
       if (getTypeName(superType).equals("gwtsu.JSONOverlay")) {
@@ -141,8 +151,19 @@ public class GWTSuIRClassCompiler {
       }
     }
     builder.append(" {\n");
-    for (IRFieldDecl field : irClass.getFields()) {
-      appendField(builder, field);
+    if (isOverlay) {
+      builder.append("protected ")
+              .append(getRelativeClassName())
+              .append("() {}\n");
+    } else {
+      for (IRFieldDecl field : irClass.getFields()) {
+        appendField(builder, field);
+      }
+    }
+    for (IRMethodStatement method : irClass.getMethods()) {
+      if (method.getName().equals("<init>")) {
+        ctors.add(method);
+      }
     }
     for (IRMethodStatement method : irClass.getMethods()) {
       appendMethod(builder, method, irClass);
@@ -187,8 +208,8 @@ public class GWTSuIRClassCompiler {
           }
         }
       }
-      if (method.getName().startsWith("set") 
-              && method.getReturnType().isVoid() 
+      if (method.getName().startsWith("set")
+              && method.getReturnType().isVoid()
               && method.getParameters().size() == 1) {
         if (methodBody instanceof IRStatementList) {
           List<IRStatement> statements = ((IRStatementList) methodBody).getStatements();
@@ -210,12 +231,12 @@ public class GWTSuIRClassCompiler {
           }
         }
       }
-      if (method.getName().equals("<init>") 
+      if (method.getName().equals("<init>")
               && method.getParameters().size() == 1
               && method.getParameters().get(0).getType().getName().equals("java.lang.String")) {
         builder.append("public static native ")
-                .append(getTypeName(irClass.getThisType()))
-                .append(" $gwtsu$parse(json : String) /*-{ return JSON.parse(json); }-*/;\n");
+                .append(getRelativeClassName())
+                .append(" $gwtsu$parse(String json) /*-{ return JSON.parse(json); }-*/;\n");
         return;
       }
     }
@@ -223,11 +244,13 @@ public class GWTSuIRClassCompiler {
     for (IRAnnotation annotation : method.getAnnotations()) {
       appendAnnotation(builder, annotation);
     }
+    List<String> exceptionsThrown = Lists.newArrayList();
+    List<String> exceptionsCaught = Lists.newArrayList();
     if (!method.getName().equals("<clinit>")) {
       builder.append(Modifier.toModifierString(method.getModifiers()))
               .append(" ");
       if (method.getName().equals("<init>")) {
-        builder.append(GosuClassUtil.getNameNoPackage(getTypeName(ownerType.getThisType())));
+        builder.append(getRelativeClassName());
       } else {
         builder.append(getTypeName(method.getReturnType()))
                 .append(" ")
@@ -246,14 +269,66 @@ public class GWTSuIRClassCompiler {
                 .append(paramName);
         symbols.put(paramName, parameter);
       }
-      builder.append(") ");
+      builder.append(")");
+      List<IType> exceptionsFromSuper = getExceptionsFromSuper(method);
+      List<IType> exceptionsFromBody = exceptionMap.getExceptions(getMethodInfoFromSymbols(
+              (IGosuClass) irClass.getThisType().getType(), method.getName(), method.getParameters()));
+      if (exceptionsFromSuper == null) {
+        for (IType exception : exceptionsFromBody) {
+          exceptionsThrown.add(exception.getName());
+        }
+      } else {
+        for (IType exception : exceptionsFromSuper) {
+          exceptionsThrown.add(exception.getName());
+        }
+        for (IType exception : exceptionsFromBody) {
+          boolean thrown = false;
+          for (IType superException : exceptionsFromSuper) {
+            if (superException.isAssignableFrom(exception)) {
+              thrown = true;
+              break;
+            }
+          }
+          if (!thrown) {
+            exceptionsCaught.add(exception.getName());
+          }
+        }
+      }
+      for (int i = 0, exceptionsSize = exceptionsThrown.size(); i < exceptionsSize; i++) {
+        String exception = exceptionsThrown.get(i);
+        if (i > 0) {
+          builder.append(", ");
+        } else {
+          builder.append(" throws ");
+        }
+        builder.append(exception);
+      }
+      builder.append(" ");
     }
     if (methodBody != null) {
+      if (!exceptionsCaught.isEmpty()) {
+        builder.append("{\ntry ");
+      }
       if (!(methodBody instanceof IRStatementList)) {
         builder.append("{\n");
       }
       appendStatement(builder, methodBody, symbols);
       if (!(methodBody instanceof IRStatementList)) {
+        builder.append("}\n");
+      }
+      if (!exceptionsCaught.isEmpty()) {
+        for (String exception : exceptionsCaught) {
+          builder.append("catch (")
+                  .append(exception)
+                  .append(" e")
+                  .append(uid)
+                  .append(") {\n")
+                  .append("throw new java.lang.RuntimeException(e")
+                  .append(uid)
+                  .append(");\n")
+                  .append("}\n");
+          uid++;
+        }
         builder.append("}\n");
       }
     } else {
@@ -382,10 +457,40 @@ public class GWTSuIRClassCompiler {
       }
       builder.append(";\n");
     } else if (statement instanceof IRStatementList) {
+      List<IRStatement> children = ((IRStatementList) statement).getStatements();
       builder.append("{\n");
       Map<String, IRSymbol> innerSymbols = Maps.newHashMap(symbols);
-      for (IRStatement child : ((IRStatementList) statement).getStatements()) {
-        if (child != null) {
+      IRMethodCallStatement ctorCall = null;
+      if (statement.getParent() instanceof IRMethodStatement
+              && ((IRMethodStatement) statement.getParent()).getName().equals("<init>")) {
+        for (IRStatement child : children) {
+          if (child instanceof IRMethodCallStatement) {
+            IRMethodCallStatement methodCallStatement = (IRMethodCallStatement) child;
+            if (methodCallStatement.getExpression() instanceof IRMethodCallExpression) {
+              if (((IRMethodCallExpression) methodCallStatement.getExpression()).getName().equals("<init>")) {
+                ctorCall = methodCallStatement;
+                break;
+              }
+            }
+            if (methodCallStatement.getExpression() instanceof IRCompositeExpression) {
+              IRCompositeExpression compositeExpression =
+                      (IRCompositeExpression) methodCallStatement.getExpression();
+              IRElement lastElement =
+                      compositeExpression.getElements().get(compositeExpression.getElements().size() - 1);
+              if (lastElement instanceof IRMethodCallExpression
+                      && ((IRMethodCallExpression) lastElement).getName().equals("<init>")) {
+                ctorCall = methodCallStatement;
+                break;
+              }
+            }
+          }
+        }
+      }
+      if (ctorCall != null) {
+        appendStatement(builder, ctorCall, innerSymbols);
+      }
+      for (IRStatement child : children) {
+        if (child != null && child != ctorCall) {
           appendStatement(builder, child, innerSymbols);
         }
       }
@@ -439,8 +544,11 @@ public class GWTSuIRClassCompiler {
       appendExpression(builder, ((IRArrayLengthExpression) expression).getRoot(), symbols);
       builder.append(".length");
     } else if (expression instanceof IRArrayLoadExpression) {
-      // TODO kcp
-      builder.append("/* IRArrayLoadExpression */");
+      IRArrayLoadExpression arrayLoadExpression = (IRArrayLoadExpression) expression;
+      appendExpression(builder, arrayLoadExpression.getRoot(), symbols);
+      builder.append("[");
+      appendExpression(builder, arrayLoadExpression.getIndex(), symbols);
+      builder.append("]");
     } else if (expression instanceof IRBooleanLiteral) {
       builder.append(((IRBooleanLiteral) expression).getValue());
     } else if (expression instanceof IRCastExpression) {
@@ -477,6 +585,9 @@ public class GWTSuIRClassCompiler {
       if (fieldGetExpression.getLhs() != null) {
         appendExpression(builder, fieldGetExpression.getLhs(), symbols);
         builder.append(".");
+      } else if (!fieldGetExpression.getOwnersType().equals(irClass.getThisType())) {
+        builder.append(getTypeName(fieldGetExpression.getOwnersType()))
+                .append(".");
       }
       builder.append(fieldGetExpression.getName());
     } else if (expression instanceof IRIdentifier) {
@@ -499,12 +610,31 @@ public class GWTSuIRClassCompiler {
           while (ancestor.getParent() != null && !(ancestor instanceof IRMethodStatement)) {
             ancestor = ancestor.getParent();
           }
-          if (((IRMethodStatement) ancestor).getName().equals("<init>") &&
-                  ((IRMethodStatement) ancestor).getParameters().size() == methodCallExpression.getArgs().size()) {
-            // super call??
-            builder.append("super(");
-          } else {
+          boolean isThis = false;
+          for (IRMethodStatement ctor : ctors) {
+            if (ctor == ancestor) {
+              continue;
+            }
+            List<IRExpression> args = methodCallExpression.getArgs();
+            if (args.size() == ctor.getParameters().size()) {
+              boolean match = true;
+              for (int i = 0, argsSize = args.size(); i < argsSize; i++) {
+                IRExpression arg = args.get(i);
+                if (!arg.getType().equals(ctor.getParameters().get(i).getType())) {
+                  match = false;
+                  break;
+                }
+              }
+              if (match) {
+                isThis = true;
+                break;
+              }
+            }
+          }
+          if (isThis) {
             builder.append("this(");
+          } else {
+            builder.append("super(");
           }
           skipName = true;
         } else {
@@ -619,34 +749,24 @@ public class GWTSuIRClassCompiler {
             .append("\n");
   }
 
-  private String getSymbolName(IRSymbol symbol) {
-    return symbol.getName().replace('*', '$');
-  }
-
-  private String getTypeName(IRType type) {
-    IType iType = type.getType();
-    if (iType instanceof IGosuClass) {
-      return ((IGosuClass) iType).getBackingClass().getName();
-    }
-    return iType.getName();
-  }
-
   private void transformCompositeExpression(StringBuilder builder, IRCompositeExpression expression, Map<String, IRSymbol> symbols) {
     StringBuilder auxMethodsBuilder = new StringBuilder();
     auxMethodsBuilders.push(auxMethodsBuilder);
-    if (expression.getElements().size() == 2 &&
-            expression.getElements().get(0) instanceof IRAssignmentStatement &&
-            expression.getElements().get(1) instanceof IRTernaryExpression) {
-      // Null-safe property/method access?
-      IRTernaryExpression ternaryExpression = (IRTernaryExpression) expression.getElements().get(1);
+    List<IRElement> elements = expression.getElements();
+    IRElement lastElement = elements.get(elements.size() - 1);
+    // Null-safe property/method access?
+    if (elements.size() == 2 &&
+            elements.get(0) instanceof IRAssignmentStatement &&
+            elements.get(1) instanceof IRTernaryExpression) {
+      IRTernaryExpression ternaryExpression = (IRTernaryExpression) elements.get(1);
       if (ternaryExpression.getTrueValue() instanceof IRCastExpression &&
               ((IRCastExpression) ternaryExpression.getTrueValue()).getRoot() instanceof IRNullLiteral &&
               ternaryExpression.getTest() instanceof IREqualityExpression &&
               ((IREqualityExpression) ternaryExpression.getTest()).getRhs() instanceof IRNullLiteral) {
-        IRAssignmentStatement assignmentStatement = (IRAssignmentStatement) expression.getElements().get(0);
+        IRAssignmentStatement assignmentStatement = (IRAssignmentStatement) elements.get(0);
         String rootTypeName = getTypeName(assignmentStatement.getSymbol().getType());
         String rtnTypeName = getTypeName(ternaryExpression.getResultType());
-        String auxMethodName = "$gwtsu$aux" + (numAuxMethods++);
+        String auxMethodName = "$gwtsu$aux" + (uid++);
         String argName = getSymbolName(assignmentStatement.getSymbol());
         builder.append(auxMethodName)
                 .append("(");
@@ -668,16 +788,33 @@ public class GWTSuIRClassCompiler {
         return;
       }
     }
-    // TODO kcp - check for other types of known composite expressions
-    // Fallback: if elements are statements + 1 expression, transform directly into aux method.
-    IRElement lastElement = expression.getElements().get(expression.getElements().size() - 1);
-    if (lastElement instanceof IRExpression) {
+    // Field set(s) + ctor (this/super) call?
+    if (lastElement instanceof IRMethodCallExpression &&
+            ((IRMethodCallExpression) lastElement).getName().equals("<init>")) {
       boolean areAllStatements = true;
-      for (IRElement element : expression.getElements()) {
+      for (IRElement element : elements) {
         areAllStatements = areAllStatements && (element instanceof IRStatement || element == lastElement);
       }
       if (areAllStatements) {
-        String auxMethodName = "$gwtsu$aux" + (numAuxMethods++);
+        appendExpression(builder, (IRMethodCallExpression) lastElement, symbols);
+        builder.append(";\n");
+        for (IRElement element : elements) {
+          if (element instanceof IRStatement) {
+            appendStatement(builder, (IRStatement) element, symbols);
+          }
+        }
+        return;
+      }
+    }
+    // TODO kcp - check for other types of known composite expressions
+    // Fallback: if elements are statements + 1 expression, transform directly into aux method.
+    if (lastElement instanceof IRExpression) {
+      boolean areAllStatements = true;
+      for (IRElement element : elements) {
+        areAllStatements = areAllStatements && (element instanceof IRStatement || element == lastElement);
+      }
+      if (areAllStatements) {
+        String auxMethodName = "$gwtsu$aux" + (uid++);
         builder.append(auxMethodName)
                 .append("(");
         appendSymbolsAsArgs(builder, symbols, false);
@@ -689,7 +826,7 @@ public class GWTSuIRClassCompiler {
                 .append("(");
         appendSymbolsAsParams(auxMethodsBuilder, symbols, false);
         auxMethodsBuilder.append(") {\n");
-        for (IRElement element : expression.getElements()) {
+        for (IRElement element : elements) {
           if (element instanceof IRStatement) {
             appendStatement(auxMethodsBuilder, (IRStatement) element, symbols);
           } else {
@@ -726,6 +863,54 @@ public class GWTSuIRClassCompiler {
               .append(" ")
               .append(symbol.getKey());
     }
+  }
+
+  private String getSymbolName(IRSymbol symbol) {
+    return symbol.getName().replace('*', '$');
+  }
+
+  private String getTypeName(IRType type) {
+    IType iType = type.getType();
+    if (iType instanceof IGosuClass) {
+      return ((IGosuClass) iType).getBackingClass().getName();
+    }
+    return iType.getName();
+  }
+
+  private String getRelativeClassName() {
+    String typeName = getTypeName(irClass.getThisType());
+    return typeName.substring(typeName.lastIndexOf(".") + 1);
+  }
+
+  private List<IType> getExceptionsFromSuper(IRMethodStatement method) {
+    IType type = irClass.getThisType().getType();
+    for (IType ancestor : type.getAllTypesInHierarchy()) {
+      if (ancestor instanceof IJavaType) {
+        Class javaClass = ((IJavaType) ancestor).getBackingClass();
+        for (Method ancestorMethod : javaClass.getMethods()) {
+          if (ancestorMethod.getName().equals(method.getName()) &&
+                  ancestorMethod.getParameterTypes().length == method.getParameters().size()) {
+            boolean match = true;
+            Class<?>[] parameterTypes = ancestorMethod.getParameterTypes();
+            for (int i = 0, parameterTypesLength = parameterTypes.length; i < parameterTypesLength; i++) {
+              Class<?> paramType = parameterTypes[i];
+              if (!paramType.getName().equals(method.getParameters().get(i).getType().getName())) {
+                match = false;
+                break;
+              }
+            }
+            if (match) {
+              List<IType> exceptions = Lists.newArrayList();
+              for (Class<?> exceptionType : ancestorMethod.getExceptionTypes()) {
+                exceptions.add(TypeSystem.getByFullNameIfValid(exceptionType.getName()));
+              }
+              return exceptions;
+            }
+          }
+        }
+      }
+    }
+    return null;
   }
 
 }
