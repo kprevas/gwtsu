@@ -231,12 +231,13 @@ public class IRClassCompiler {
           }
         }
       }
-      if (method.getName().equals("<init>")
-              && method.getParameters().size() == 1
-              && method.getParameters().get(0).getType().getName().equals("java.lang.String")) {
-        builder.append("public static native ")
-                .append(getRelativeClassName())
-                .append(" $gwtsu$parse(String json) /*-{ return JSON.parse(json); }-*/;\n");
+      if (method.getName().equals("<init>")) {
+        if (method.getParameters().size() == 1
+                && method.getParameters().get(0).getType().getName().equals("java.lang.String")) {
+          builder.append("public static native ")
+                  .append(getRelativeClassName())
+                  .append(" $gwtsu$parse(String json) /*-{ return JSON.parse(json); }-*/;\n");
+        }
         return;
       }
     }

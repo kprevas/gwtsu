@@ -5,4 +5,5 @@ gwtsu-cache
 gwt-unitCache
 sample/html/public/gwttest
 sample/html/WEB-INF/gwttest
+sample/runtime
 .idea

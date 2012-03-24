@@ -7,6 +7,8 @@ class DataObj extends JSONOverlay {
   var _p2 : int as P2
   var _p3 : List<DataObj> as P3
 
+  construct() {}
+
   construct(json : String) {
     super(json)
   }
