@@ -68,6 +68,7 @@ import gw.lang.reflect.java.IJavaType;
 import gw.util.GosuClassUtil;
 
 import java.lang.reflect.Method;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -827,12 +828,13 @@ public class IRClassCompiler {
                 .append("(");
         appendSymbolsAsParams(auxMethodsBuilder, symbols, false);
         auxMethodsBuilder.append(") {\n");
+        HashMap<String,IRSymbol> tempSymbols = Maps.newHashMap(symbols);
         for (IRElement element : elements) {
           if (element instanceof IRStatement) {
-            appendStatement(auxMethodsBuilder, (IRStatement) element, symbols);
+            appendStatement(auxMethodsBuilder, (IRStatement) element, tempSymbols);
           } else {
             auxMethodsBuilder.append("return ");
-            appendExpression(auxMethodsBuilder, (IRExpression) element, symbols);
+            appendExpression(auxMethodsBuilder, (IRExpression) element, tempSymbols);
             auxMethodsBuilder.append(";\n");
           }
         }

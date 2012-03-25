@@ -12,8 +12,11 @@ class GwtTest implements EntryPoint {
    * This is the entry point method.
    */
   override function onModuleLoad() {
-    var label = new Label(new OtherClientClass().Label)
+    var other = new OtherClientClass()
+    var label = new Label(other.Label)
     RootPanel.get("main").add(label)
+    var label2 = new Label(other.enhx())
+    RootPanel.get("main").add(label2)
     var builder = new RequestBuilder(RequestBuilder.GET, "Main/data")
     builder.sendRequest(null, new RequestCallback() {
       override function onError(req : Request, e : Throwable) {

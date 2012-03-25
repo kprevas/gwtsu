@@ -15,6 +15,7 @@ import gw.lang.parser.statements.IClassFileStatement;
 import gw.lang.reflect.IType;
 import gw.lang.reflect.TypeSystem;
 import gw.lang.reflect.gs.IGosuClass;
+import gw.lang.reflect.gs.IGosuEnhancement;
 import gw.util.GosuClassUtil;
 import org.apache.commons.io.FileUtils;
 
@@ -145,6 +146,11 @@ public class GWTsuCompiler {
       if (innerClass instanceof IGosuClass) {
         findReferencedTypes((IGosuClass) innerClass, gosuClasses);
       }
+    }
+    List<? extends IGosuEnhancement> enhancements =
+            gsClass.getTypeLoader().getEnhancementIndex().getEnhancementsForGenericType(gsClass);
+    for (IGosuEnhancement enhancement : enhancements) {
+      findReferencedTypes(enhancement, gosuClasses);
     }
     List<ITypeLiteralExpression> results = new ArrayList<ITypeLiteralExpression>();
     IClassFileStatement classFileStatement = gsClass.getClassStatement().getClassFileStatement();
