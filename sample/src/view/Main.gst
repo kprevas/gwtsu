@@ -3,7 +3,7 @@
   <head>
     <meta http-equiv="content-type" content="text/html; charset=UTF-8">
     <title>Hello GWTsu</title>
-    <script type="text/javascript" language="javascript" src="public/gwttest/gwttest.nocache.js"></script>
+    <script type="text/javascript" language="javascript" src="public/roblog/roblog.nocache.js"></script>
   </head>
   <body>
     <div id="main"></div>

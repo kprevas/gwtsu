@@ -1,5 +1,6 @@
 package config
 
+uses db.roblog.User
 uses ronin.*
 uses ronin.config.*
 uses ronin.console.*
@@ -18,6 +19,12 @@ class RoninConfig extends DefaultRoninConfig {
     } else if( m == PRODUCTION ) {
       db.model.Database.JdbcUrl = "jdbc:h2:file:runtime/h2/proddb"
     }
+    AuthManager = createDefaultAuthManager(
+      \ username -> User.selectLike(new User(){:Name = username}).first(),
+      \ identity, email, idProvider -> User.getOrCreateByOpenID(identity, email, idProvider),
+      User#Name, User#Hash, User#Salt
+    )
+    AdminConsole.start({"admin"})
   }
 
 }
