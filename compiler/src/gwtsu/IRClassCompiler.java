@@ -785,7 +785,8 @@ public class IRClassCompiler {
         appendSymbolsAsParams(auxMethodsBuilder, symbols, true);
         auxMethodsBuilder.append(") {\n")
                 .append("return ");
-        appendExpression(auxMethodsBuilder, ternaryExpression, symbols);
+        HashMap<String, IRSymbol> tempSymbols = Maps.newHashMap(symbols);
+        appendExpression(auxMethodsBuilder, ternaryExpression, tempSymbols);
         auxMethodsBuilder.append(";\n}\n");
         return;
       }
