@@ -92,6 +92,8 @@ public class IRClassCompiler {
             "gwtsu.Util.makeIterator");
     replacementMethods.put("gw.lang.reflect.TypeSystem.getByFullName",
             "gwtsu.Util.getByFullName");
+    replacementMethods.put("gw.internal.gosu.runtime.GosuRuntimeMethods.typeof",
+            "gwtsu.Util.typeof");
   }
 
   private IRClass irClass;

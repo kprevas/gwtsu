@@ -31,4 +31,8 @@ public class Util {
       throw new RuntimeException(e);
     }
   }
+  
+  public static Class typeof(Object obj) {
+    return obj.getClass();
+  }
 }
