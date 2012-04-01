@@ -89,9 +89,9 @@ public class IRClassCompiler {
     replacementTypes.put("gw.lang.reflect.IType", "Class");
     replacementTypes.put("gw.lang.parser.EvaluationException", "RuntimeException");
     replacementMethods.put("gw.internal.gosu.ir.transform.statement.ForEachStatementTransformer.makeIterator",
-            "Util.makeIterator");
+            "gwtsu.Util.makeIterator");
     replacementMethods.put("gw.lang.reflect.TypeSystem.getByFullName",
-            "Util.getByFullName");
+            "gwtsu.Util.getByFullName");
   }
 
   private IRClass irClass;
@@ -100,6 +100,7 @@ public class IRClassCompiler {
   private Set<IRMethodStatement> ctors = Sets.newHashSet();
   private int uid = 0;
   private boolean isOverlay;
+  private boolean isStatic;
 
   public IRClassCompiler(IRClass irClass, ExceptionMap exceptionMap) {
     this.irClass = irClass;
@@ -180,7 +181,11 @@ public class IRClassCompiler {
     for (IRAnnotation annotation : field.getAnnotations()) {
       appendAnnotation(builder, annotation);
     }
-    builder.append(Modifier.toModifierString(field.getModifiers()))
+    int modifiers = field.getModifiers();
+    if (field.getName().startsWith("typeparam$")) {
+      modifiers &= ~Modifier.FINAL;
+    }
+    builder.append(Modifier.toModifierString(modifiers))
             .append(" ")
             .append(getTypeName(field.getType()))
             .append(" ")
@@ -193,6 +198,7 @@ public class IRClassCompiler {
     if (method.getName().equals("getIntrinsicType") || method.getName().startsWith("$")) {
       return;
     }
+    isStatic = Modifier.isStatic(method.getModifiers());
     IRStatement methodBody = method.getMethodBody();
     if (isOverlay) {
       if (method.getName().startsWith("get") && method.getParameters().isEmpty()) {
@@ -862,8 +868,11 @@ public class IRClassCompiler {
         appendExpression(builder, assignmentStatement.getValue(), symbols);
         appendSymbolsAsArgs(builder, symbols, true);
         builder.append(")");
-        auxMethodsBuilder.append("private ")
-                .append(rtnTypeName)
+        auxMethodsBuilder.append("private ");
+        if (isStatic) {
+          auxMethodsBuilder.append("static ");
+        }
+        auxMethodsBuilder.append(rtnTypeName)
                 .append(auxMethodName)
                 .append("(")
                 .append(rootTypeName)
@@ -909,8 +918,11 @@ public class IRClassCompiler {
                 .append("(");
         appendSymbolsAsArgs(builder, symbols, false);
         builder.append(")");
-        auxMethodsBuilder.append("private ")
-                .append(getTypeName(((IRExpression) lastElement).getType()))
+        auxMethodsBuilder.append("private ");
+        if (isStatic) {
+          auxMethodsBuilder.append("static ");
+        }
+        auxMethodsBuilder.append(getTypeName(((IRExpression) lastElement).getType()))
                 .append(" ")
                 .append(auxMethodName)
                 .append("(");

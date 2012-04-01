@@ -103,11 +103,11 @@ public class GWTsuCompiler {
         t.printStackTrace();
       }
     }
-    File utilFile = new File(gwtsuCache, "Util.java");
+    File utilFile = new File(new File(gwtsuCache, "gwtsu"), "Util.java");
     Files.copy(new InputSupplier<InputStream>() {
       @Override
       public InputStream getInput() throws IOException {
-        return GWTsuCompiler.class.getClassLoader().getResourceAsStream("Util.java");
+        return GWTsuCompiler.class.getClassLoader().getResourceAsStream("gwtsu/Util.java");
       }
     }, utilFile);
     gwtsuCacheUrls[0] = gwtsuCache.toURI().toURL();
