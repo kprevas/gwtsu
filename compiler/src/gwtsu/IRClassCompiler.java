@@ -437,6 +437,16 @@ public class IRClassCompiler {
       appendStatement(builder, forEachStatement.getBody(), innerSymbols);
     } else if (statement instanceof IRIfStatement) {
       IRIfStatement ifStatement = (IRIfStatement) statement;
+      if (ifStatement.getExpression() instanceof IRInstanceOfExpression) {
+        IRInstanceOfExpression instanceOfExpression = (IRInstanceOfExpression) ifStatement.getExpression();
+        IType testType = instanceOfExpression.getTestType().getType();
+        IType rootType = instanceOfExpression.getRoot().getType().getType();
+        if (!testType.isInterface() && !rootType.isAssignableFrom(testType)
+                && !testType.isAssignableFrom(rootType)) {
+          appendStatement(builder, ifStatement.getElseStatement(), symbols);
+          return;
+        }
+      }
       builder.append("if (");
       appendExpression(builder, ifStatement.getExpression(), symbols);
       builder.append(") ");
@@ -807,7 +817,7 @@ public class IRClassCompiler {
     } else if (expression instanceof IRStringLiteralExpression) {
       builder.append("\"")
               .append(((IRStringLiteralExpression) expression).getValue()
-                  .replace("\"", "\\\""))
+                      .replace("\"", "\\\""))
               .append("\"");
     } else if (expression instanceof IRTernaryExpression) {
       IRTernaryExpression ternaryExpression = (IRTernaryExpression) expression;
