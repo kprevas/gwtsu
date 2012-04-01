@@ -90,9 +90,9 @@ public class IRClassCompiler {
     replacementTypes.put("gw.lang.parser.EvaluationException", "RuntimeException");
     replacementMethods.put("gw.internal.gosu.ir.transform.statement.ForEachStatementTransformer.makeIterator",
             "gwtsu.Util.makeIterator");
-    replacementMethods.put("gw.lang.reflect.TypeSystem.getByFullName",
-            "gwtsu.Util.getByFullName");
     replacementMethods.put("gw.internal.gosu.runtime.GosuRuntimeMethods.typeof",
+            "gwtsu.Util.typeof");
+    replacementMethods.put("gw.lang.reflect.TypeSystem.getFromObject",
             "gwtsu.Util.typeof");
   }
 
@@ -678,6 +678,17 @@ public class IRClassCompiler {
               && methodCallExpression.getName().equals("get")) {
         appendExpression(builder, methodCallExpression.getArgs().get(0), symbols);
         builder.append(".class");
+        return;
+      }
+      if (methodCallExpression.getOwnersType().getName().equals("gw.lang.reflect.TypeSystem")
+              && methodCallExpression.getName().equals("getByFullName")) {
+        IRExpression arg = methodCallExpression.getArgs().get(0);
+        if (arg instanceof IRStringLiteralExpression) {
+          builder.append(((IRStringLiteralExpression) arg).getValue());
+        } else {
+          // TODO kcp - ???
+          builder.append("java.lang.Object");
+        }
         return;
       }
       boolean skipName = false;

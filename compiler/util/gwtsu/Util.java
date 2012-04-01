@@ -24,14 +24,6 @@ public class Util {
     throw new IllegalStateException();
   }
   
-  public static Class getByFullName(String className, String module) {
-    try {
-      return Class.forName(className);
-    } catch (ClassNotFoundException e) {
-      throw new RuntimeException(e);
-    }
-  }
-  
   public static Class typeof(Object obj) {
     return obj.getClass();
   }
