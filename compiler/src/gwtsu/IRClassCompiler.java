@@ -826,12 +826,14 @@ public class IRClassCompiler {
                       .replace("\"", "\\\""))
               .append("\"");
     } else if (expression instanceof IRTernaryExpression) {
+      builder.append('(');
       IRTernaryExpression ternaryExpression = (IRTernaryExpression) expression;
       appendExpression(builder, ternaryExpression.getTest(), symbols);
       builder.append(" ? ");
       appendExpression(builder, ternaryExpression.getTrueValue(), symbols);
       builder.append(" : ");
       appendExpression(builder, ternaryExpression.getFalseValue(), symbols);
+      builder.append(')');
     } else {
       throw new IllegalArgumentException("Unknown expression type " + expression.getClass().getSimpleName());
     }
