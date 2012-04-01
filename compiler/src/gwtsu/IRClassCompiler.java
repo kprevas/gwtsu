@@ -806,7 +806,8 @@ public class IRClassCompiler {
       appendExpression(builder, relationalExpression.getRhs(), symbols);
     } else if (expression instanceof IRStringLiteralExpression) {
       builder.append("\"")
-              .append(((IRStringLiteralExpression) expression).getValue())  // TODO kcp - escape?
+              .append(((IRStringLiteralExpression) expression).getValue()
+                  .replace("\"", "\\\""))
               .append("\"");
     } else if (expression instanceof IRTernaryExpression) {
       IRTernaryExpression ternaryExpression = (IRTernaryExpression) expression;
