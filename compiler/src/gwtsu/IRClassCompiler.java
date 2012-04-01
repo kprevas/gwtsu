@@ -162,7 +162,10 @@ public class IRClassCompiler {
     if (isOverlay) {
       builder.append("protected ")
               .append(getRelativeClassName())
-              .append("() {}\n");
+              .append("() {}\n")
+              .append("public static native ")
+              .append(getRelativeClassName())
+              .append(" $gwtsu$parse(String json) /*-{ return JSON.parse(json); }-*/;\n");
     } else {
       for (IRFieldDecl field : irClass.getFields()) {
         appendField(builder, field);
@@ -243,15 +246,6 @@ public class IRClassCompiler {
             return;
           }
         }
-      }
-      if (method.getName().equals("<init>")) {
-        if (method.getParameters().size() == 1
-                && method.getParameters().get(0).getType().getName().equals("java.lang.String")) {
-          builder.append("public static native ")
-                  .append(getRelativeClassName())
-                  .append(" $gwtsu$parse(String json) /*-{ return JSON.parse(json); }-*/;\n");
-        }
-        return;
       }
     }
     Map<String, IRSymbol> symbols = Maps.newLinkedHashMap();
@@ -692,6 +686,14 @@ public class IRClassCompiler {
         }
         return;
       }
+      if (methodCallExpression.getOwnersType().getName().equals("gwtsu.JSONOverlayListEnhx")
+              && methodCallExpression.getName().equals("parse")
+              && methodCallExpression.getArgs().size() == 3) {
+        appendListJSONParse(builder, symbols,
+                methodCallExpression.getArgs().get(0),
+                methodCallExpression.getArgs().get(2));
+        return;
+      }
       boolean skipName = false;
       String replacement = replacementMethods.get(
               getTypeName(methodCallExpression.getOwnersType()) + "." + methodCallExpression.getName());
@@ -775,10 +777,7 @@ public class IRClassCompiler {
               .isAssignableFrom(newExpression.getOwnersType().getType()) &&
               args.size() == 1 &&
               args.get(0).getType().getName().equals("java.lang.String")) {
-        builder.append(getTypeName(newExpression.getOwnersType()))
-            .append(".$gwtsu$parse(");
-        appendExpression(builder, args.get(0), symbols);
-        builder.append(")");
+        appendSingleJSONParse(builder, symbols, newExpression, args);
       } else {
         builder.append("new ")
                 .append(getTypeName(newExpression.getOwnersType()))
@@ -998,6 +997,43 @@ public class IRClassCompiler {
     }
   }
 
+  private void appendSingleJSONParse(StringBuilder builder, Map<String, IRSymbol> symbols, 
+                                     IRNewExpression newExpression, List<IRExpression> args) {
+    builder.append(getTypeName(newExpression.getOwnersType()))
+            .append(".$gwtsu$parse(");
+    appendExpression(builder, args.get(0), symbols);
+    builder.append(")");
+  }
+
+  private void appendListJSONParse(StringBuilder builder, Map<String, IRSymbol> symbols,
+                                   IRExpression listExpression, IRExpression dataExpression) {
+    builder.append("{java.util.List gwtsu$jsonList = ");
+    appendExpression(builder, listExpression, symbols);
+    builder.append(";\n")
+            .append("for (com.google.gwt.core.client.JavaScriptObject gwtsu$jsonTmp : gwtsu.Util.splitJSON(");
+    appendExpression(builder, dataExpression, symbols);
+    builder.append(")) {\n")
+            .append("gwtsu$jsonList.add(gwtsu$jsonTmp);\n")
+            .append("}}\n");
+  }
+
+  private void appendThrows(StringBuilder builder, List<String> exceptionsThrown) {
+    for (int i = 0, exceptionsSize = exceptionsThrown.size(); i < exceptionsSize; i++) {
+      String exception = exceptionsThrown.get(i);
+      if (i > 0) {
+        builder.append(", ");
+      } else {
+        builder.append(" throws ");
+      }
+      if (replacementTypes.containsKey(exception)) {
+        builder.append(replacementTypes.get(exception));
+      } else {
+        builder.append(exception);
+      }
+    }
+    builder.append(" ");
+  }
+
   private String getSymbolName(IRSymbol symbol) {
     return symbol.getName().replace("*", "gwtsu$");
   }
@@ -1050,23 +1086,6 @@ public class IRClassCompiler {
       }
     }
     return null;
-  }
-
-  private void appendThrows(StringBuilder builder, List<String> exceptionsThrown) {
-    for (int i = 0, exceptionsSize = exceptionsThrown.size(); i < exceptionsSize; i++) {
-      String exception = exceptionsThrown.get(i);
-      if (i > 0) {
-        builder.append(", ");
-      } else {
-        builder.append(" throws ");
-      }
-      if (replacementTypes.containsKey(exception)) {
-        builder.append(replacementTypes.get(exception));
-      } else {
-        builder.append(exception);
-      }
-    }
-    builder.append(" ");
   }
 
 }

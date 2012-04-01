@@ -1,5 +1,7 @@
 package gwtsu;
 
+import com.google.gwt.core.client.JavaScriptObject;
+
 import java.util.Iterator;
 
 public class Util {
@@ -27,4 +29,8 @@ public class Util {
   public static Class typeof(Object obj) {
     return obj.getClass();
   }
+  
+  public static native JavaScriptObject[] splitJSON(String json) /*-{
+    return JSON.parse(json);
+  }-*/;
 }
