@@ -415,15 +415,23 @@ public class IRClassCompiler {
     } else if (statement instanceof IRForEachStatement) {
       IRForEachStatement forEachStatement = (IRForEachStatement) statement;
       Map<String, IRSymbol> innerSymbols = Maps.newHashMap(symbols);
-      builder.append("for (");
       List<IRStatement> initializers = forEachStatement.getInitializers();
-      for (int i = 0, initializersSize = initializers.size(); i < initializersSize; i++) {
-        if (i > 0) {
-          builder.append(", ");
+      if (initializers.size() > 1) {
+        builder.append("{\n");
+        for (IRStatement initializer : initializers) {
+          appendStatement(builder, initializer, innerSymbols);
         }
-        appendStatement(builder, initializers.get(i), innerSymbols);
-        if (builder.substring(builder.length() - 2, builder.length()).equals(";\n")) {
-          builder.setLength(builder.length() - 2);
+        builder.append("for (");
+      } else {
+        builder.append("for (");
+        for (int i = 0, initializersSize = initializers.size(); i < initializersSize; i++) {
+          if (i > 0) {
+            builder.append(", ");
+          }
+          appendStatement(builder, initializers.get(i), innerSymbols);
+          if (builder.substring(builder.length() - 2, builder.length()).equals(";\n")) {
+            builder.setLength(builder.length() - 2);
+          }
         }
       }
       builder.append("; ");
@@ -441,6 +449,9 @@ public class IRClassCompiler {
       }
       builder.append(") ");
       appendStatement(builder, forEachStatement.getBody(), innerSymbols);
+      if (initializers.size() > 1) {
+        builder.append("}\n");
+      }
     } else if (statement instanceof IRIfStatement) {
       IRIfStatement ifStatement = (IRIfStatement) statement;
       if (ifStatement.getExpression() instanceof IRInstanceOfExpression) {
