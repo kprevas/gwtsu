@@ -7,8 +7,6 @@ import com.google.gwt.dev.cfg.ModuleDefLoader;
 import com.google.gwt.thirdparty.guava.common.collect.Lists;
 import com.google.gwt.thirdparty.guava.common.collect.Maps;
 import com.google.gwt.thirdparty.guava.common.collect.Sets;
-import com.google.gwt.thirdparty.guava.common.io.Files;
-import com.google.gwt.thirdparty.guava.common.io.InputSupplier;
 import gw.lang.Gosu;
 import gw.lang.ir.IRClass;
 import gw.lang.parser.expressions.IBeanMethodCallExpression;
@@ -23,8 +21,6 @@ import gw.util.GosuClassUtil;
 import org.apache.commons.io.FileUtils;
 
 import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -103,13 +99,6 @@ public class GWTsuCompiler {
         t.printStackTrace();
       }
     }
-    File utilFile = new File(new File(gwtsuCache, "gwtsu"), "Util.java");
-    Files.copy(new InputSupplier<InputStream>() {
-      @Override
-      public InputStream getInput() throws IOException {
-        return GWTsuCompiler.class.getClassLoader().getResourceAsStream("gwtsu/Util.java");
-      }
-    }, utilFile);
     gwtsuCacheUrls[0] = gwtsuCache.toURI().toURL();
     Thread.currentThread().setContextClassLoader(
             new URLClassLoader(gwtsuCacheUrls, Thread.currentThread().getContextClassLoader()));
@@ -118,7 +107,8 @@ public class GWTsuCompiler {
   }
 
   private static void findReferencedTypes(IGosuClass gsClass, Set<IGosuClass> gosuClasses) {
-    if (gosuClasses.contains(gsClass)) {
+    if (gosuClasses.contains(gsClass) || gsClass.getName().startsWith("gwtsu")
+            || gsClass.getName().equals("gw.lang.reflect.gs.IGosuObject")) {
       return;
     }
     gosuClasses.add(gsClass);
