@@ -945,6 +945,10 @@ public class IRClassCompiler {
         for (IRElement element : elements) {
           if (element instanceof IRStatement) {
             appendStatement(auxMethodsBuilder, (IRStatement) element, tempSymbols);
+          } else if (element instanceof IRMethodCallExpression &&
+                  ((IRMethodCallExpression) element).getReturnType().isVoid()) {
+            appendExpression(auxMethodsBuilder, (IRExpression) element, tempSymbols);
+            auxMethodsBuilder.append(";\n");
           } else {
             auxMethodsBuilder.append("return ");
             appendExpression(auxMethodsBuilder, (IRExpression) element, tempSymbols);
