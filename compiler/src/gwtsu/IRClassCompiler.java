@@ -684,10 +684,11 @@ public class IRClassCompiler {
               && methodCallExpression.getName().equals("getByFullName")) {
         IRExpression arg = methodCallExpression.getArgs().get(0);
         if (arg instanceof IRStringLiteralExpression) {
-          builder.append(((IRStringLiteralExpression) arg).getValue());
+          builder.append(((IRStringLiteralExpression) arg).getValue())
+                  .append(".class");
         } else {
           // TODO kcp - ???
-          builder.append("java.lang.Object");
+          builder.append("Object.class");
         }
         return;
       }
