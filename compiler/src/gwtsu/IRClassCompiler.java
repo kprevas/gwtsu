@@ -314,20 +314,7 @@ public class IRClassCompiler {
           }
         }
       }
-      for (int i = 0, exceptionsSize = exceptionsThrown.size(); i < exceptionsSize; i++) {
-        String exception = exceptionsThrown.get(i);
-        if (i > 0) {
-          builder.append(", ");
-        } else {
-          builder.append(" throws ");
-        }
-        if (replacementTypes.containsKey(exception)) {
-          builder.append(replacementTypes.get(exception));
-        } else {
-          builder.append(exception);
-        }
-      }
-      builder.append(" ");
+      appendThrows(builder, exceptionsThrown);
     }
     if (methodBody != null) {
       if (!exceptionsCaught.isEmpty()) {
@@ -892,7 +879,13 @@ public class IRClassCompiler {
                 .append(" ")
                 .append(argName);
         appendSymbolsAsParams(auxMethodsBuilder, symbols, true);
-        auxMethodsBuilder.append(") {\n")
+        auxMethodsBuilder.append(") ");
+        List<String> exceptionNames = Lists.newArrayList();
+        for (IType exception : exceptionMap.getExceptions(expression)) {
+          exceptionNames.add(exception.getName());
+        }
+        appendThrows(auxMethodsBuilder, exceptionNames);
+        auxMethodsBuilder.append("{\n")
                 .append("return ");
         HashMap<String, IRSymbol> tempSymbols = Maps.newHashMap(symbols);
         appendExpression(auxMethodsBuilder, ternaryExpression, tempSymbols);
@@ -940,7 +933,13 @@ public class IRClassCompiler {
                 .append(auxMethodName)
                 .append("(");
         appendSymbolsAsParams(auxMethodsBuilder, symbols, false);
-        auxMethodsBuilder.append(") {\n");
+        auxMethodsBuilder.append(") ");
+        List<String> exceptionNames = Lists.newArrayList();
+        for (IType exception : exceptionMap.getExceptions(expression)) {
+          exceptionNames.add(exception.getName());
+        }
+        appendThrows(auxMethodsBuilder, exceptionNames);
+        auxMethodsBuilder.append("{\n");
         HashMap<String,IRSymbol> tempSymbols = Maps.newHashMap(symbols);
         for (IRElement element : elements) {
           if (element instanceof IRStatement) {
@@ -1034,6 +1033,23 @@ public class IRClassCompiler {
       }
     }
     return null;
+  }
+
+  private void appendThrows(StringBuilder builder, List<String> exceptionsThrown) {
+    for (int i = 0, exceptionsSize = exceptionsThrown.size(); i < exceptionsSize; i++) {
+      String exception = exceptionsThrown.get(i);
+      if (i > 0) {
+        builder.append(", ");
+      } else {
+        builder.append(" throws ");
+      }
+      if (replacementTypes.containsKey(exception)) {
+        builder.append(replacementTypes.get(exception));
+      } else {
+        builder.append(exception);
+      }
+    }
+    builder.append(" ");
   }
 
 }

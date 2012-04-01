@@ -3,6 +3,7 @@ package gwtsu;
 import com.google.gwt.thirdparty.guava.common.collect.Lists;
 import com.google.gwt.thirdparty.guava.common.collect.Maps;
 import gw.lang.ir.IRClass;
+import gw.lang.ir.IRElement;
 import gw.lang.ir.IRExpression;
 import gw.lang.ir.IRStatement;
 import gw.lang.ir.IRSymbol;
@@ -11,6 +12,7 @@ import gw.lang.ir.expression.IRArithmeticExpression;
 import gw.lang.ir.expression.IRArrayLengthExpression;
 import gw.lang.ir.expression.IRArrayLoadExpression;
 import gw.lang.ir.expression.IRCastExpression;
+import gw.lang.ir.expression.IRCompositeExpression;
 import gw.lang.ir.expression.IRConditionalAndExpression;
 import gw.lang.ir.expression.IRConditionalOrExpression;
 import gw.lang.ir.expression.IREqualityExpression;
@@ -66,6 +68,7 @@ public class CheckedExceptionAnalyzer {
 
   public static class ExceptionMap {
     private Map<IFeatureInfo, List<IType>> map = Maps.newHashMap();
+    private Map<IRCompositeExpression, List<IType>> compositeExprMap = Maps.newHashMap();
 
     public List<IType> getExceptions(IFeatureInfo method) {
       List<IType> exceptions = map.get(method);
@@ -78,6 +81,22 @@ public class CheckedExceptionAnalyzer {
         if (types == null) {
           types = Lists.newArrayList();
           map.put(feature, types);
+        }
+        types.add(exceptionType);
+      }
+    }
+
+    public List<IType> getExceptions(IRCompositeExpression compositeExpression) {
+      List<IType> exceptions = compositeExprMap.get(compositeExpression);
+      return exceptions != null ? exceptions : Collections.<IType>emptyList();
+    }
+
+    public void putException(IRCompositeExpression compositeExpression, IType exceptionType) {
+      if (!TypeSystem.get(RuntimeException.class).isAssignableFrom(exceptionType)) {
+        List<IType> types = compositeExprMap.get(compositeExpression);
+        if (types == null) {
+          types = Lists.newArrayList();
+          compositeExprMap.put(compositeExpression, types);
         }
         types.add(exceptionType);
       }
@@ -145,9 +164,20 @@ public class CheckedExceptionAnalyzer {
       }
       findCheckedExceptions(((IRForEachStatement) statement).getBody(), featureInfo, exceptionMap);
     } else if (statement instanceof IRIfStatement) {
-      findCheckedExceptions(((IRIfStatement) statement).getExpression(), featureInfo, exceptionMap);
-      findCheckedExceptions(((IRIfStatement) statement).getIfStatement(), featureInfo, exceptionMap);
-      findCheckedExceptions(((IRIfStatement) statement).getElseStatement(), featureInfo, exceptionMap);
+      IRIfStatement ifStatement = (IRIfStatement) statement;
+      if (ifStatement.getExpression() instanceof IRInstanceOfExpression) {
+        IRInstanceOfExpression instanceOfExpression = (IRInstanceOfExpression) ifStatement.getExpression();
+        IType testType = instanceOfExpression.getTestType().getType();
+        IType rootType = instanceOfExpression.getRoot().getType().getType();
+        if (!testType.isInterface() && !rootType.isAssignableFrom(testType)
+                && !testType.isAssignableFrom(rootType)) {
+          findCheckedExceptions(ifStatement.getElseStatement(), featureInfo, exceptionMap);
+          return;
+        }
+      }
+      findCheckedExceptions(ifStatement.getExpression(), featureInfo, exceptionMap);
+      findCheckedExceptions(ifStatement.getIfStatement(), featureInfo, exceptionMap);
+      findCheckedExceptions(ifStatement.getElseStatement(), featureInfo, exceptionMap);
     } else if (statement instanceof IRStatementList) {
       for (IRStatement child : ((IRStatementList) statement).getStatements()) {
         findCheckedExceptions(child, featureInfo, exceptionMap);
@@ -196,6 +226,9 @@ public class CheckedExceptionAnalyzer {
         for (IExceptionInfo exceptionInfo : target.getExceptions()) {
           exceptionMap.putException(featureInfo, exceptionInfo.getExceptionType());
         }
+        for (IType exceptionType : exceptionMap.getExceptions(target)) {
+          exceptionMap.putException(featureInfo, exceptionType);
+        }
       }
     } else if (expression instanceof IRNewExpression) {
       IType ownersType = ((IRNewExpression) expression).getOwnersType().getType();
@@ -203,6 +236,22 @@ public class CheckedExceptionAnalyzer {
       for (IExceptionInfo exceptionInfo : target.getExceptions()) {
         exceptionMap.putException(featureInfo, exceptionInfo.getExceptionType());
       }
+      for (IType exceptionType : exceptionMap.getExceptions(target)) {
+        exceptionMap.putException(featureInfo, exceptionType);
+      }
+    } else if (expression instanceof IRCompositeExpression) {
+      ExceptionMap compositeExceptionMap = new ExceptionMap();
+      for (IRElement element : ((IRCompositeExpression) expression).getElements()) {
+        if (element instanceof IRStatement) {
+          findCheckedExceptions((IRStatement) element, featureInfo, compositeExceptionMap);
+        } else if (element instanceof IRExpression) {
+          findCheckedExceptions((IRExpression) element, featureInfo, compositeExceptionMap);
+        }
+      }
+      for (IType compositeException : compositeExceptionMap.getExceptions(featureInfo)) {
+        exceptionMap.putException((IRCompositeExpression) expression, compositeException);
+      }
+      exceptionMap.merge(compositeExceptionMap);
     } else if (expression instanceof IRArrayLoadExpression) {
       findCheckedExceptions(((IRArrayLoadExpression) expression).getRoot(), featureInfo, exceptionMap);
       findCheckedExceptions(((IRArrayLoadExpression) expression).getIndex(), featureInfo, exceptionMap);
