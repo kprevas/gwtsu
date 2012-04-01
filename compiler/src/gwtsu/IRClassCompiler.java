@@ -75,21 +75,25 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Stack;
 
-import static gwtsu.CheckedExceptionAnalyzer.ExceptionMap;
-import static gwtsu.CheckedExceptionAnalyzer.getMethodInfoFromSymbols;
+import static gwtsu.CheckedExceptionAnalyzer.*;
 
 /**
  * @author kprevas
  */
 public class IRClassCompiler {
   
+  private final static Map<String, String> replacementTypes = Maps.newHashMap();
   private final static Map<String, String> replacementMethods = Maps.newHashMap();
 
   static {
+    replacementTypes.put("gw.lang.reflect.IType", "Class");
+    replacementTypes.put("gw.lang.parser.EvaluationException", "RuntimeException");
     replacementMethods.put("gw.internal.gosu.ir.transform.statement.ForEachStatementTransformer.makeIterator",
             "Util.makeIterator");
+    replacementMethods.put("gw.lang.reflect.TypeSystem.getByFullName",
+            "Util.getByFullName");
   }
-  
+
   private IRClass irClass;
   private ExceptionMap exceptionMap;
   private Stack<StringBuilder> auxMethodsBuilders = new Stack<StringBuilder>();
@@ -167,7 +171,7 @@ public class IRClassCompiler {
       }
     }
     for (IRMethodStatement method : irClass.getMethods()) {
-      appendMethod(builder, method, irClass);
+      appendMethod(builder, method);
     }
     builder.append("}");
   }
@@ -185,7 +189,7 @@ public class IRClassCompiler {
     builder.append(";\n");
   }
 
-  private void appendMethod(StringBuilder builder, IRMethodStatement method, IRClass ownerType) {
+  private void appendMethod(StringBuilder builder, IRMethodStatement method) {
     if (method.getName().equals("getIntrinsicType") || method.getName().startsWith("$")) {
       return;
     }
@@ -273,8 +277,14 @@ public class IRClassCompiler {
       }
       builder.append(")");
       List<IType> exceptionsFromSuper = getExceptionsFromSuper(method);
-      List<IType> exceptionsFromBody = exceptionMap.getExceptions(getMethodInfoFromSymbols(
-              (IGosuClass) irClass.getThisType().getType(), method.getName(), method.getParameters()));
+      List<IType> exceptionsFromBody;
+      if (method.getName().equals("<init>")) {
+        exceptionsFromBody = exceptionMap.getExceptions(getCtorInfoFromSymbols(
+                (IGosuClass) irClass.getThisType().getType(), method.getParameters()));
+      } else {
+        exceptionsFromBody = exceptionMap.getExceptions(getMethodInfoFromSymbols(
+                (IGosuClass) irClass.getThisType().getType(), method.getName(), method.getParameters()));
+      }
       if (exceptionsFromSuper == null) {
         for (IType exception : exceptionsFromBody) {
           exceptionsThrown.add(exception.getName());
@@ -303,7 +313,11 @@ public class IRClassCompiler {
         } else {
           builder.append(" throws ");
         }
-        builder.append(exception);
+        if (replacementTypes.containsKey(exception)) {
+          builder.append(replacementTypes.get(exception));
+        } else {
+          builder.append(exception);
+        }
       }
       builder.append(" ");
     }
@@ -538,9 +552,43 @@ public class IRClassCompiler {
     if (expression instanceof IRArithmeticExpression) {
       IRArithmeticExpression arithmeticExpression = (IRArithmeticExpression) expression;
       appendExpression(builder, arithmeticExpression.getLhs(), symbols);
-      builder.append(" ")
-              .append(arithmeticExpression.getOp())
-              .append(" ");
+      builder.append(" ");
+      switch (arithmeticExpression.getOp()) {
+        case Addition:
+          builder.append('+');
+          break;
+        case Subtraction:
+          builder.append('-');
+          break;
+        case Multiplication:
+          builder.append('*');
+          break;
+        case Division:
+          builder.append('/');
+          break;
+        case Remainder:
+          builder.append('%');
+          break;
+        case ShiftLeft:
+          builder.append("<<");
+          break;
+        case ShiftRight:
+          builder.append(">>");
+          break;
+        case UnsignedShiftRight:
+          builder.append(">>>");
+          break;
+        case BitwiseAnd:
+          builder.append('&');
+          break;
+        case BitwiseOr:
+          builder.append('|');
+          break;
+        case BitwiseXor:
+          builder.append('^');
+          break;
+      }
+      builder.append(" ");
       appendExpression(builder, arithmeticExpression.getRhs(), symbols);
     } else if (expression instanceof IRArrayLengthExpression) {
       appendExpression(builder, ((IRArrayLengthExpression) expression).getRoot(), symbols);
@@ -601,6 +649,21 @@ public class IRClassCompiler {
               .append(getTypeName(instanceOfExpression.getTestType()));
     } else if (expression instanceof IRMethodCallExpression) {
       IRMethodCallExpression methodCallExpression = (IRMethodCallExpression) expression;
+      if (methodCallExpression.getOwnersType().getName()
+              .equals("gw.internal.gosu.parser.expressions.AdditiveExpression")) {
+        builder.append('(');
+        appendExpression(builder, methodCallExpression.getArgs().get(1), symbols);
+        builder.append(" + ");
+        appendExpression(builder, methodCallExpression.getArgs().get(2), symbols);
+        builder.append(')');
+        return;
+      }
+      if (methodCallExpression.getOwnersType().getName().equals("gw.lang.reflect.TypeSystem")
+              && methodCallExpression.getName().equals("get")) {
+        appendExpression(builder, methodCallExpression.getArgs().get(0), symbols);
+        builder.append(".class");
+        return;
+      }
       boolean skipName = false;
       String replacement = replacementMethods.get(
               getTypeName(methodCallExpression.getOwnersType()) + "." + methodCallExpression.getName());
@@ -724,9 +787,22 @@ public class IRClassCompiler {
     } else if (expression instanceof IRRelationalExpression) {
       IRRelationalExpression relationalExpression = (IRRelationalExpression) expression;
       appendExpression(builder, relationalExpression.getLhs(), symbols);
-      builder.append(" ")
-              .append(relationalExpression.getOp())
-              .append(" ");
+      builder.append(" ");
+      switch (relationalExpression.getOp()) {
+        case GT:
+          builder.append('>');
+          break;
+        case GTE:
+          builder.append(">=");
+          break;
+        case LT:
+          builder.append('<');
+          break;
+        case LTE:
+          builder.append("<=");
+          break;
+      }
+      builder.append(" ");
       appendExpression(builder, relationalExpression.getRhs(), symbols);
     } else if (expression instanceof IRStringLiteralExpression) {
       builder.append("\"")
@@ -875,6 +951,9 @@ public class IRClassCompiler {
 
   private String getTypeName(IRType type) {
     IType iType = type.getType();
+    if (replacementTypes.containsKey(iType.getName())) {
+      return replacementTypes.get(iType.getName());
+    }
     if (iType instanceof IGosuClass) {
       return ((IGosuClass) iType).getBackingClass().getName().replace("$", "__");
     }

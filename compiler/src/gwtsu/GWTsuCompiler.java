@@ -4,12 +4,15 @@ import com.google.gwt.core.ext.TreeLogger;
 import com.google.gwt.core.ext.UnableToCompleteException;
 import com.google.gwt.dev.cfg.ModuleDef;
 import com.google.gwt.dev.cfg.ModuleDefLoader;
+import com.google.gwt.thirdparty.guava.common.collect.Lists;
 import com.google.gwt.thirdparty.guava.common.collect.Maps;
 import com.google.gwt.thirdparty.guava.common.collect.Sets;
 import com.google.gwt.thirdparty.guava.common.io.Files;
 import com.google.gwt.thirdparty.guava.common.io.InputSupplier;
 import gw.lang.Gosu;
 import gw.lang.ir.IRClass;
+import gw.lang.parser.expressions.IBeanMethodCallExpression;
+import gw.lang.parser.expressions.IMemberAccessExpression;
 import gw.lang.parser.expressions.ITypeLiteralExpression;
 import gw.lang.parser.statements.IClassFileStatement;
 import gw.lang.reflect.IType;
@@ -25,7 +28,6 @@ import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -116,7 +118,7 @@ public class GWTsuCompiler {
   }
 
   private static void findReferencedTypes(IGosuClass gsClass, Set<IGosuClass> gosuClasses) {
-    if (gsClass.getName().startsWith("gwtsu.") || gosuClasses.contains(gsClass)) {
+    if (gosuClasses.contains(gsClass)) {
       return;
     }
     gosuClasses.add(gsClass);
@@ -152,12 +154,32 @@ public class GWTsuCompiler {
     for (IGosuEnhancement enhancement : enhancements) {
       findReferencedTypes(enhancement, gosuClasses);
     }
-    List<ITypeLiteralExpression> results = new ArrayList<ITypeLiteralExpression>();
     IClassFileStatement classFileStatement = gsClass.getClassStatement().getClassFileStatement();
     if (classFileStatement != null) {
-      classFileStatement.getContainedParsedElementsByType(ITypeLiteralExpression.class, results);
-      for (ITypeLiteralExpression tl : results) {
+      List<ITypeLiteralExpression> typeLiterals = Lists.newArrayList();
+      classFileStatement.getContainedParsedElementsByType(ITypeLiteralExpression.class, typeLiterals);
+      for (ITypeLiteralExpression tl : typeLiterals) {
         IType type = tl.getType().getType();
+        if (type instanceof IGosuClass) {
+          findReferencedTypes((IGosuClass) (type.isParameterizedType() ? type.getGenericType() : type),
+                  gosuClasses);
+        }
+      }
+      List<IMemberAccessExpression> memberAccesses = Lists.newArrayList();
+      classFileStatement.getContainedParsedElementsByType(IMemberAccessExpression.class, memberAccesses);
+      for (IMemberAccessExpression memberAccess : memberAccesses) {
+        IType type = null;
+        if (memberAccess instanceof IBeanMethodCallExpression) {
+          type = ((IBeanMethodCallExpression) memberAccess).getMethodDescriptor().getOwnersType();
+        } else {
+          try {
+            if (memberAccess.getPropertyInfo() != null) {
+              type = memberAccess.getPropertyInfo().getOwnersType();
+            }
+          } catch (RuntimeException e) {
+            // This can blow up sometimes
+          }
+        }
         if (type instanceof IGosuClass) {
           findReferencedTypes((IGosuClass) (type.isParameterizedType() ? type.getGenericType() : type),
                   gosuClasses);

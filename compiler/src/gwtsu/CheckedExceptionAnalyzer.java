@@ -40,12 +40,19 @@ import gw.lang.ir.statement.IRSwitchStatement;
 import gw.lang.ir.statement.IRThrowStatement;
 import gw.lang.ir.statement.IRTryCatchFinallyStatement;
 import gw.lang.ir.statement.IRWhileStatement;
+import gw.lang.reflect.IBlockType;
 import gw.lang.reflect.IConstructorInfo;
 import gw.lang.reflect.IExceptionInfo;
+import gw.lang.reflect.IFeatureInfo;
 import gw.lang.reflect.IMethodInfo;
+import gw.lang.reflect.IParameterInfo;
+import gw.lang.reflect.IRelativeTypeInfo;
 import gw.lang.reflect.IType;
+import gw.lang.reflect.TypeSystem;
 import gw.lang.reflect.gs.IGosuClass;
+import gw.lang.reflect.gs.IGosuEnhancement;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -56,25 +63,27 @@ import java.util.Map;
  * @author kprevas
  */
 public class CheckedExceptionAnalyzer {
-  
+
   public static class ExceptionMap {
-    private Map<IMethodInfo, List<IType>> map = Maps.newHashMap();
-    
-    public List<IType> getExceptions(IMethodInfo method) {
+    private Map<IFeatureInfo, List<IType>> map = Maps.newHashMap();
+
+    public List<IType> getExceptions(IFeatureInfo method) {
       List<IType> exceptions = map.get(method);
       return exceptions != null ? exceptions : Collections.<IType>emptyList();
     }
-    
-    public void putException(IMethodInfo method, IType exceptionType) {
-      List<IType> types = map.get(method);
-      if (types == null) {
-        types = Lists.newArrayList();
-        map.put(method, types);
+
+    public void putException(IFeatureInfo feature, IType exceptionType) {
+      if (!TypeSystem.get(RuntimeException.class).isAssignableFrom(exceptionType)) {
+        List<IType> types = map.get(feature);
+        if (types == null) {
+          types = Lists.newArrayList();
+          map.put(feature, types);
+        }
+        types.add(exceptionType);
       }
-      types.add(exceptionType);
     }
 
-    public void removeException(IMethodInfo method, IType exceptionType) {
+    public void removeException(IFeatureInfo method, IType exceptionType) {
       List<IType> types = map.get(method);
       if (types != null) {
         types.remove(exceptionType);
@@ -85,181 +94,328 @@ public class CheckedExceptionAnalyzer {
       map.putAll(otherMap.map);
     }
   }
-  
-  public static void findCheckedExceptions(IGosuClass type, 
-                                           ExceptionMap exceptionMap, 
+
+  public static void findCheckedExceptions(IGosuClass type,
+                                           ExceptionMap exceptionMap,
                                            Map<IGosuClass, IRClass> compiledClasses) {
     IRClass irClass = compiledClasses.get(type);
-    for (IRMethodStatement methodStatement : irClass.getMethods()) {
-      IMethodInfo methodInfo = getMethodInfoFromSymbols(type, methodStatement.getName(), methodStatement.getParameters());
-      findCheckedExceptions(methodStatement.getMethodBody(), methodInfo, exceptionMap);
+    if (irClass != null) {
+      for (IRMethodStatement methodStatement : irClass.getMethods()) {
+        IFeatureInfo featureInfo;
+        if (methodStatement.getName().equals("<init>")) {
+          featureInfo = getCtorInfoFromSymbols(type, methodStatement.getParameters());
+        } else {
+          featureInfo = getMethodInfoFromSymbols(type, methodStatement.getName(), methodStatement.getParameters());
+        }
+        if (featureInfo != null) {
+          findCheckedExceptions(methodStatement.getMethodBody(), featureInfo, exceptionMap);
+        }
+      }
     }
   }
 
   private static void findCheckedExceptions(IRStatement statement,
-                                            IMethodInfo methodInfo,
+                                            IFeatureInfo featureInfo,
                                             ExceptionMap exceptionMap) {
     if (statement instanceof IRThrowStatement) {
-      exceptionMap.putException(methodInfo, ((IRThrowStatement) statement).getException().getType().getType());
-      findCheckedExceptions(((IRThrowStatement) statement).getException(), methodInfo, exceptionMap);
+      exceptionMap.putException(featureInfo, ((IRThrowStatement) statement).getException().getType().getType());
+      findCheckedExceptions(((IRThrowStatement) statement).getException(), featureInfo, exceptionMap);
     } else if (statement instanceof IRTryCatchFinallyStatement) {
       ExceptionMap tryBlockExceptionMap = new ExceptionMap();
-      findCheckedExceptions(((IRTryCatchFinallyStatement) statement).getTryBody(), methodInfo, tryBlockExceptionMap);
+      findCheckedExceptions(((IRTryCatchFinallyStatement) statement).getTryBody(), featureInfo, tryBlockExceptionMap);
       for (IRCatchClause catchClause : ((IRTryCatchFinallyStatement) statement).getCatchStatements()) {
-        tryBlockExceptionMap.removeException(methodInfo, catchClause.getIdentifier().getType().getType());
-        findCheckedExceptions(catchClause.getBody(), methodInfo, exceptionMap);
+        tryBlockExceptionMap.removeException(featureInfo, catchClause.getIdentifier().getType().getType());
+        findCheckedExceptions(catchClause.getBody(), featureInfo, exceptionMap);
       }
       exceptionMap.merge(tryBlockExceptionMap);
-      findCheckedExceptions(((IRTryCatchFinallyStatement) statement).getFinallyBody(), methodInfo, exceptionMap);
+      findCheckedExceptions(((IRTryCatchFinallyStatement) statement).getFinallyBody(), featureInfo, exceptionMap);
     } else if (statement instanceof IRDoWhileStatement) {
-      findCheckedExceptions(((IRDoWhileStatement) statement).getBody(), methodInfo, exceptionMap);
-      findCheckedExceptions(((IRDoWhileStatement) statement).getLoopTest(), methodInfo, exceptionMap);
+      findCheckedExceptions(((IRDoWhileStatement) statement).getBody(), featureInfo, exceptionMap);
+      findCheckedExceptions(((IRDoWhileStatement) statement).getLoopTest(), featureInfo, exceptionMap);
     } else if (statement instanceof IRWhileStatement) {
-      findCheckedExceptions(((IRWhileStatement) statement).getLoopTest(), methodInfo, exceptionMap);
-      findCheckedExceptions(((IRWhileStatement) statement).getBody(), methodInfo, exceptionMap);
+      findCheckedExceptions(((IRWhileStatement) statement).getLoopTest(), featureInfo, exceptionMap);
+      findCheckedExceptions(((IRWhileStatement) statement).getBody(), featureInfo, exceptionMap);
     } else if (statement instanceof IRForEachStatement) {
-      findCheckedExceptions(((IRForEachStatement) statement).getLoopTest(), methodInfo, exceptionMap);
+      findCheckedExceptions(((IRForEachStatement) statement).getLoopTest(), featureInfo, exceptionMap);
       for (IRStatement init : ((IRForEachStatement) statement).getInitializers()) {
-        findCheckedExceptions(init, methodInfo, exceptionMap);
+        findCheckedExceptions(init, featureInfo, exceptionMap);
       }
       for (IRStatement inc : ((IRForEachStatement) statement).getIncrementors()) {
-        findCheckedExceptions(inc, methodInfo, exceptionMap);
+        findCheckedExceptions(inc, featureInfo, exceptionMap);
       }
-      findCheckedExceptions(((IRForEachStatement) statement).getBody(), methodInfo, exceptionMap);      
+      findCheckedExceptions(((IRForEachStatement) statement).getBody(), featureInfo, exceptionMap);
     } else if (statement instanceof IRIfStatement) {
-      findCheckedExceptions(((IRIfStatement) statement).getExpression(), methodInfo, exceptionMap);
-      findCheckedExceptions(((IRIfStatement) statement).getIfStatement(), methodInfo, exceptionMap);      
-      findCheckedExceptions(((IRIfStatement) statement).getElseStatement(), methodInfo, exceptionMap);      
+      findCheckedExceptions(((IRIfStatement) statement).getExpression(), featureInfo, exceptionMap);
+      findCheckedExceptions(((IRIfStatement) statement).getIfStatement(), featureInfo, exceptionMap);
+      findCheckedExceptions(((IRIfStatement) statement).getElseStatement(), featureInfo, exceptionMap);
     } else if (statement instanceof IRStatementList) {
       for (IRStatement child : ((IRStatementList) statement).getStatements()) {
-        findCheckedExceptions(child, methodInfo, exceptionMap);
+        findCheckedExceptions(child, featureInfo, exceptionMap);
       }
     } else if (statement instanceof IRSwitchStatement) {
-      findCheckedExceptions(((IRSwitchStatement) statement).getInit(), methodInfo, exceptionMap);
+      findCheckedExceptions(((IRSwitchStatement) statement).getInit(), featureInfo, exceptionMap);
       for (IRCaseClause caseClause : ((IRSwitchStatement) statement).getCases()) {
         for (IRStatement caseStatement : caseClause.getStatements()) {
-          findCheckedExceptions(caseStatement, methodInfo, exceptionMap);
+          findCheckedExceptions(caseStatement, featureInfo, exceptionMap);
         }
       }
       for (IRStatement defaultStatement : ((IRSwitchStatement) statement).getDefaultStatements()) {
-        findCheckedExceptions(defaultStatement, methodInfo, exceptionMap);
+        findCheckedExceptions(defaultStatement, featureInfo, exceptionMap);
       }
     } else if (statement instanceof IRReturnStatement) {
       IRExpression returnValue = ((IRReturnStatement) statement).getReturnValue();
       if (returnValue != null) {
-        findCheckedExceptions(returnValue, methodInfo, exceptionMap);
+        findCheckedExceptions(returnValue, featureInfo, exceptionMap);
       }
     } else if (statement instanceof IRArrayStoreStatement) {
-      findCheckedExceptions(((IRArrayStoreStatement) statement).getTarget(), methodInfo, exceptionMap);
-      findCheckedExceptions(((IRArrayStoreStatement) statement).getIndex(), methodInfo, exceptionMap);
-      findCheckedExceptions(((IRArrayStoreStatement) statement).getValue(), methodInfo, exceptionMap);
+      findCheckedExceptions(((IRArrayStoreStatement) statement).getTarget(), featureInfo, exceptionMap);
+      findCheckedExceptions(((IRArrayStoreStatement) statement).getIndex(), featureInfo, exceptionMap);
+      findCheckedExceptions(((IRArrayStoreStatement) statement).getValue(), featureInfo, exceptionMap);
     } else if (statement instanceof IRAssignmentStatement) {
-      findCheckedExceptions(((IRAssignmentStatement) statement).getValue(), methodInfo, exceptionMap);
+      findCheckedExceptions(((IRAssignmentStatement) statement).getValue(), featureInfo, exceptionMap);
     } else if (statement instanceof IRFieldSetStatement) {
-      findCheckedExceptions(((IRFieldSetStatement) statement).getLhs(), methodInfo, exceptionMap);
-      findCheckedExceptions(((IRFieldSetStatement) statement).getRhs(), methodInfo, exceptionMap);
+      findCheckedExceptions(((IRFieldSetStatement) statement).getLhs(), featureInfo, exceptionMap);
+      findCheckedExceptions(((IRFieldSetStatement) statement).getRhs(), featureInfo, exceptionMap);
     } else if (statement instanceof IRMethodCallStatement) {
-      findCheckedExceptions(((IRMethodCallStatement) statement).getExpression(), methodInfo, exceptionMap);
+      findCheckedExceptions(((IRMethodCallStatement) statement).getExpression(), featureInfo, exceptionMap);
     }
   }
 
-  private static void findCheckedExceptions(IRExpression expression, IMethodInfo methodInfo, ExceptionMap exceptionMap) {
+  private static void findCheckedExceptions(IRExpression expression, IFeatureInfo featureInfo, ExceptionMap exceptionMap) {
     if (expression instanceof IRMethodCallExpression) {
       IRMethodCallExpression methodCallExpression = (IRMethodCallExpression) expression;
       IType ownersType = methodCallExpression.getOwnersType().getType();
       if (methodCallExpression.getName().equals("<init>")) {
         IConstructorInfo target = getCtorInfoFromTypes(ownersType, methodCallExpression.getParameterTypes());
         for (IExceptionInfo exceptionInfo : target.getExceptions()) {
-          exceptionMap.putException(methodInfo, exceptionInfo.getExceptionType());
+          exceptionMap.putException(featureInfo, exceptionInfo.getExceptionType());
         }
       } else {
         IMethodInfo target = getMethodInfoFromTypes(ownersType, methodCallExpression.getName(),
                 methodCallExpression.getParameterTypes());
         for (IExceptionInfo exceptionInfo : target.getExceptions()) {
-          exceptionMap.putException(methodInfo, exceptionInfo.getExceptionType());
+          exceptionMap.putException(featureInfo, exceptionInfo.getExceptionType());
         }
       }
     } else if (expression instanceof IRNewExpression) {
       IType ownersType = ((IRNewExpression) expression).getOwnersType().getType();
       IConstructorInfo target = getCtorInfoFromTypes(ownersType, ((IRNewExpression) expression).getParameterTypes());
       for (IExceptionInfo exceptionInfo : target.getExceptions()) {
-        exceptionMap.putException(methodInfo, exceptionInfo.getExceptionType());
+        exceptionMap.putException(featureInfo, exceptionInfo.getExceptionType());
       }
     } else if (expression instanceof IRArrayLoadExpression) {
-      findCheckedExceptions(((IRArrayLoadExpression) expression).getRoot(), methodInfo, exceptionMap);
-      findCheckedExceptions(((IRArrayLoadExpression) expression).getIndex(), methodInfo, exceptionMap);
+      findCheckedExceptions(((IRArrayLoadExpression) expression).getRoot(), featureInfo, exceptionMap);
+      findCheckedExceptions(((IRArrayLoadExpression) expression).getIndex(), featureInfo, exceptionMap);
     } else if (expression instanceof IRNotExpression) {
-      findCheckedExceptions(((IRNotExpression) expression).getRoot(), methodInfo, exceptionMap);
+      findCheckedExceptions(((IRNotExpression) expression).getRoot(), featureInfo, exceptionMap);
     } else if (expression instanceof IRNewMultiDimensionalArrayExpression) {
       for (IRExpression size : ((IRNewMultiDimensionalArrayExpression) expression).getSizeExpressions()) {
-        findCheckedExceptions(size, methodInfo, exceptionMap);
+        findCheckedExceptions(size, featureInfo, exceptionMap);
       }
     } else if (expression instanceof IRRelationalExpression) {
-      findCheckedExceptions(((IRRelationalExpression) expression).getLhs(), methodInfo, exceptionMap);
-      findCheckedExceptions(((IRRelationalExpression) expression).getRhs(), methodInfo, exceptionMap);
+      findCheckedExceptions(((IRRelationalExpression) expression).getLhs(), featureInfo, exceptionMap);
+      findCheckedExceptions(((IRRelationalExpression) expression).getRhs(), featureInfo, exceptionMap);
     } else if (expression instanceof IRArithmeticExpression) {
-      findCheckedExceptions(((IRArithmeticExpression) expression).getLhs(), methodInfo, exceptionMap);
-      findCheckedExceptions(((IRArithmeticExpression) expression).getRhs(), methodInfo, exceptionMap);
+      findCheckedExceptions(((IRArithmeticExpression) expression).getLhs(), featureInfo, exceptionMap);
+      findCheckedExceptions(((IRArithmeticExpression) expression).getRhs(), featureInfo, exceptionMap);
     } else if (expression instanceof IRFieldGetExpression) {
-      findCheckedExceptions(((IRFieldGetExpression) expression).getLhs(), methodInfo, exceptionMap);
+      findCheckedExceptions(((IRFieldGetExpression) expression).getLhs(), featureInfo, exceptionMap);
     } else if (expression instanceof IRTernaryExpression) {
-      findCheckedExceptions(((IRTernaryExpression) expression).getTest(), methodInfo, exceptionMap);
-      findCheckedExceptions(((IRTernaryExpression) expression).getTrueValue(), methodInfo, exceptionMap);
-      findCheckedExceptions(((IRTernaryExpression) expression).getFalseValue(), methodInfo, exceptionMap);
+      findCheckedExceptions(((IRTernaryExpression) expression).getTest(), featureInfo, exceptionMap);
+      findCheckedExceptions(((IRTernaryExpression) expression).getTrueValue(), featureInfo, exceptionMap);
+      findCheckedExceptions(((IRTernaryExpression) expression).getFalseValue(), featureInfo, exceptionMap);
     } else if (expression instanceof IRConditionalOrExpression) {
-      findCheckedExceptions(((IRConditionalOrExpression) expression).getLhs(), methodInfo, exceptionMap);
-      findCheckedExceptions(((IRConditionalOrExpression) expression).getRhs(), methodInfo, exceptionMap);
+      findCheckedExceptions(((IRConditionalOrExpression) expression).getLhs(), featureInfo, exceptionMap);
+      findCheckedExceptions(((IRConditionalOrExpression) expression).getRhs(), featureInfo, exceptionMap);
     } else if (expression instanceof IRNewArrayExpression) {
-      findCheckedExceptions(((IRNewArrayExpression) expression).getSizeExpression(), methodInfo, exceptionMap);
+      findCheckedExceptions(((IRNewArrayExpression) expression).getSizeExpression(), featureInfo, exceptionMap);
     } else if (expression instanceof IRCastExpression) {
-      findCheckedExceptions(((IRCastExpression) expression).getRoot(), methodInfo, exceptionMap);
+      findCheckedExceptions(((IRCastExpression) expression).getRoot(), featureInfo, exceptionMap);
     } else if (expression instanceof IRArrayLengthExpression) {
-      findCheckedExceptions(((IRArrayLengthExpression) expression).getRoot(), methodInfo, exceptionMap);
+      findCheckedExceptions(((IRArrayLengthExpression) expression).getRoot(), featureInfo, exceptionMap);
     } else if (expression instanceof IRNegationExpression) {
-      findCheckedExceptions(((IRNegationExpression) expression).getRoot(), methodInfo, exceptionMap);
+      findCheckedExceptions(((IRNegationExpression) expression).getRoot(), featureInfo, exceptionMap);
     } else if (expression instanceof IREqualityExpression) {
-      findCheckedExceptions(((IREqualityExpression) expression).getLhs(), methodInfo, exceptionMap);
-      findCheckedExceptions(((IREqualityExpression) expression).getRhs(), methodInfo, exceptionMap);
+      findCheckedExceptions(((IREqualityExpression) expression).getLhs(), featureInfo, exceptionMap);
+      findCheckedExceptions(((IREqualityExpression) expression).getRhs(), featureInfo, exceptionMap);
     } else if (expression instanceof IRConditionalAndExpression) {
-      findCheckedExceptions(((IRConditionalAndExpression) expression).getLhs(), methodInfo, exceptionMap);
-      findCheckedExceptions(((IRConditionalAndExpression) expression).getRhs(), methodInfo, exceptionMap);
+      findCheckedExceptions(((IRConditionalAndExpression) expression).getLhs(), featureInfo, exceptionMap);
+      findCheckedExceptions(((IRConditionalAndExpression) expression).getRhs(), featureInfo, exceptionMap);
     } else if (expression instanceof IRInstanceOfExpression) {
-      findCheckedExceptions(((IRInstanceOfExpression) expression).getRoot(), methodInfo, exceptionMap);
+      findCheckedExceptions(((IRInstanceOfExpression) expression).getRoot(), featureInfo, exceptionMap);
     }
   }
 
   public static IMethodInfo getMethodInfoFromSymbols(IGosuClass type, String name, List<IRSymbol> parameters) {
-    IType[] paramTypes = new IType[parameters.size()];
-    for (int i = 0, parametersSize = parameters.size(); i < parametersSize; i++) {
-      IRSymbol parameter = parameters.get(i);
-      paramTypes[i] = parameter.getType().getType();
+    List<IRType> types = Lists.newArrayList();
+    for (IRSymbol parameter : parameters) {
+      types.add(parameter.getType());
     }
-    IMethodInfo method = type.getTypeInfo().getMethod(name, paramTypes);
-    if (method == null && (name.startsWith("get") || name.startsWith("set"))) {
-      method = type.getTypeInfo().getMethod("@" + name.substring(3), paramTypes);
-    }
-    return method;
+    return getMethodInfoFromTypes(type, name, types);
   }
 
   private static IMethodInfo getMethodInfoFromTypes(IType type, String name, List<IRType> parameterTypes) {
     IType[] paramTypes = new IType[parameterTypes.size()];
+    boolean hasBlocks = false;
     for (int i = 0, parametersSize = parameterTypes.size(); i < parametersSize; i++) {
       IRType parameter = parameterTypes.get(i);
       paramTypes[i] = parameter.getType();
+      if (paramTypes[i].getName().startsWith("gw.lang.function.IFunction")) {
+        hasBlocks = true;
+      }
     }
-    IMethodInfo method = type.getTypeInfo().getMethod(name, paramTypes);
+    IMethodInfo method = null;
+    if (hasBlocks) {
+      List<? extends IMethodInfo> methods;
+      if (type.getTypeInfo() instanceof IRelativeTypeInfo) {
+        methods = ((IRelativeTypeInfo) type.getTypeInfo()).getMethods(type);
+      } else {
+        methods = type.getTypeInfo().getMethods();
+      }
+      for (IMethodInfo methodInfo : methods) {
+        IParameterInfo[] parameters = methodInfo.getParameters();
+        if (parameters.length == paramTypes.length) {
+          boolean match = true;
+          for (int i = 0, parametersLength = parameters.length; i < parametersLength; i++) {
+            IParameterInfo parameterInfo = parameters[i];
+            if (paramTypes[i].getName().startsWith("gw.lang.function.IFunction")
+                    && parameterInfo.getFeatureType() instanceof IBlockType) {
+              IMethodInfo blockMethod = paramTypes[i].getTypeInfo().getMethods().get(0);
+              IBlockType blockType = (IBlockType) parameterInfo.getFeatureType();
+              if (!blockMethod.getReturnType().equals(blockType.getReturnType())) {
+                match = false;
+                break;
+              }
+              if (blockMethod.getParameters().length != blockType.getParameterTypes().length) {
+                match = false;
+                break;
+              }
+              IParameterInfo[] blockParams = blockMethod.getParameters();
+              for (int j = 0, blockParamsLength = blockParams.length; j < blockParamsLength; j++) {
+                if (!blockParams[i].getFeatureType().equals(blockType.getParameterTypes()[i])) {
+                  match = false;
+                  break;
+                }
+              }
+            } else {
+              if (!parameterInfo.getFeatureType().equals(paramTypes[i])) {
+                match = false;
+                break;
+              }
+            }
+          }
+          if (match) {
+            method = methodInfo;
+            break;
+          }
+        }
+      }
+    } else {
+      if (type.getTypeInfo() instanceof IRelativeTypeInfo) {
+        method = ((IRelativeTypeInfo) type.getTypeInfo()).getMethod(type, name, paramTypes);
+      } else {
+        method = type.getTypeInfo().getMethod(name, paramTypes);
+      }
+    }
     if (method == null && (name.startsWith("get") || name.startsWith("set"))) {
       method = type.getTypeInfo().getMethod("@" + name.substring(3), paramTypes);
+    }
+    if (method == null) {
+      if (type instanceof IGosuEnhancement) {
+        int actualStart = 1;
+        IType enhancedType = ((IGosuEnhancement) type).getEnhancedType();
+        if (enhancedType.isGenericType()) {
+          actualStart += enhancedType.getGenericTypeVariables().length;
+        }
+        if (parameterTypes.size() >= actualStart) {
+          method = getMethodInfoFromTypes(type, name, parameterTypes.subList(actualStart, parameterTypes.size()));
+        }
+      }
+      if (method == null && type.isGenericType()) {
+        int numTypeVars = type.getGenericTypeVariables().length;
+        if (parameterTypes.size() > numTypeVars) {
+          method = getMethodInfoFromTypes(
+                  type.getParameterizedType(Arrays.copyOfRange(paramTypes, 0, numTypeVars)),
+                  name,
+                  parameterTypes.subList(numTypeVars, parameterTypes.size()));
+        }
+      }
+
     }
     return method;
   }
 
+  public static IConstructorInfo getCtorInfoFromSymbols(IGosuClass type, List<IRSymbol> parameters) {
+    List<IRType> types = Lists.newArrayList();
+    for (IRSymbol parameter : parameters) {
+      types.add(parameter.getType());
+    }
+    return getCtorInfoFromTypes(type, types);
+  }
+
   private static IConstructorInfo getCtorInfoFromTypes(IType type, List<IRType> parameterTypes) {
     IType[] paramTypes = new IType[parameterTypes.size()];
+    boolean hasBlocks = false;
     for (int i = 0, parametersSize = parameterTypes.size(); i < parametersSize; i++) {
       IRType parameter = parameterTypes.get(i);
       paramTypes[i] = parameter.getType();
+      if (paramTypes[i].getName().startsWith("gw.lang.function.IFunction")) {
+        hasBlocks = true;
+      }
     }
-    return type.getTypeInfo().getConstructor(paramTypes);
+    IConstructorInfo ctor = null;
+    if (hasBlocks) {
+      List<? extends IConstructorInfo> constructors;
+      if (type.getTypeInfo() instanceof IRelativeTypeInfo) {
+        constructors = ((IRelativeTypeInfo) type.getTypeInfo()).getConstructors(type);
+      } else {
+        constructors = type.getTypeInfo().getConstructors();
+      }
+      for (IConstructorInfo constructorInfo : constructors) {
+        IParameterInfo[] parameters = constructorInfo.getParameters();
+        if (parameters.length == paramTypes.length) {
+          boolean match = true;
+          for (int i = 0, parametersLength = parameters.length; i < parametersLength; i++) {
+            IParameterInfo parameterInfo = parameters[i];
+            if (paramTypes[i].getName().startsWith("gw.lang.function.IFunction")
+                    && parameterInfo.getFeatureType() instanceof IBlockType) {
+              IMethodInfo blockMethod = paramTypes[i].getTypeInfo().getMethods().get(0);
+              IBlockType blockType = (IBlockType) parameterInfo.getFeatureType();
+              if (!blockMethod.getReturnType().equals(blockType.getReturnType())) {
+                match = false;
+                break;
+              }
+              if (blockMethod.getParameters().length != blockType.getParameterTypes().length) {
+                match = false;
+                break;
+              }
+              IParameterInfo[] blockParams = blockMethod.getParameters();
+              for (int j = 0, blockParamsLength = blockParams.length; j < blockParamsLength; j++) {
+                if (!blockParams[i].getFeatureType().equals(blockType.getParameterTypes()[i])) {
+                  match = false;
+                  break;
+                }
+              }
+            } else {
+              if (!parameterInfo.getFeatureType().equals(paramTypes[i])) {
+                match = false;
+                break;
+              }
+            }
+          }
+          if (match) {
+            ctor = constructorInfo;
+            break;
+          }
+        }
+      }
+    } else {
+      if (type.getTypeInfo() instanceof IRelativeTypeInfo) {
+        ctor = ((IRelativeTypeInfo) type.getTypeInfo()).getConstructor(type, paramTypes);
+      } else {
+        ctor = type.getTypeInfo().getConstructor(paramTypes);
+      }
+    }
+    return ctor;
   }
 }
