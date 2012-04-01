@@ -1002,6 +1002,9 @@ public class IRClassCompiler {
   }
 
   private String getTypeName(IRType type) {
+    if (type.isArray()) {
+      return getTypeName(type.getComponentType()) + "[]";
+    }
     IType iType = type.getType();
     if (replacementTypes.containsKey(iType.getName())) {
       return replacementTypes.get(iType.getName());
