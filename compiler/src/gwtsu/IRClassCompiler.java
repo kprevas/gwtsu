@@ -247,6 +247,9 @@ public class IRClassCompiler {
           }
         }
       }
+      if (method.getName().equals("<init>")) {
+        return;
+      }
     }
     Map<String, IRSymbol> symbols = Maps.newLinkedHashMap();
     for (IRAnnotation annotation : method.getAnnotations()) {

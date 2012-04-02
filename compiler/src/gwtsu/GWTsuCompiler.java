@@ -108,7 +108,7 @@ public class GWTsuCompiler {
 
   private static void findReferencedTypes(IGosuClass gsClass, Set<IGosuClass> gosuClasses) {
     if (gosuClasses.contains(gsClass) || gsClass.getName().startsWith("gwtsu")
-            || gsClass.getName().equals("gw.lang.reflect.gs.IGosuObject")) {
+            || gsClass.getName().endsWith("gw.lang.reflect.gs.IGosuObject")) {
       return;
     }
     gosuClasses.add(gsClass);
