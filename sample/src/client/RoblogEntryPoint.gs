@@ -12,7 +12,8 @@ class RoblogEntryPoint implements EntryPoint {
    * This is the entry point method.
    */
   override function onModuleLoad() {
-    var builder = new RequestBuilder(RequestBuilder.GET, "Postcx/recent")
+    RootPanel.get("main").add(new Label("Loading..."))
+    var builder = new RequestBuilder(RequestBuilder.GET, "Postcx/recent?page=0")
     builder.sendRequest(null, new RequestCallback() {
       override function onError(req : Request, e : Throwable) {
 
@@ -20,6 +21,13 @@ class RoblogEntryPoint implements EntryPoint {
       override function onResponseReceived(req : Request, resp : Response) {
         var posts : List<Post> = {}
         posts.parse(resp.Text)
+        var main = RootPanel.get("main")
+        main.clear()
+        for(post in posts) {
+          main.add(new Label(post.Title))
+          main.add(new Label(post.Body))
+          main.add(new Label(post.Posted))
+        }
       }
     })
   }

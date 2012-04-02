@@ -1,6 +1,5 @@
 package controller
 
-uses client.DataObj
 uses ronin.*
 
 class Main extends RoninController {

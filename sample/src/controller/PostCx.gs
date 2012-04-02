@@ -1,12 +1,11 @@
 package controller
 
 uses db.roblog.Post
-uses client.DataObj
 uses ronin.*
 
 class PostCx extends RoninController {
 
-  function recent(page : int) {
+  function recent(page : int) : String {
     if(page == null) {
       page = 0
     }
@@ -15,8 +14,8 @@ class PostCx extends RoninController {
     return posts.map(\p -> new client.Post(p)).overlayToJSON()
   }
 
-  function post(post : Post) {
-    return new client.Post(post)
+  function post(post : Post) : String {
+    return (new client.Post(post)).overlayToJSON()
   }
 
 }

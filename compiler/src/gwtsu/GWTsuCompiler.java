@@ -86,7 +86,7 @@ public class GWTsuCompiler {
         File dir = new File(gwtsuCache, packageName.replace('.', File.separatorChar));
         File javaFile = new File(dir, name.substring(packageName.length() + 1) + ".java");
         if (!javaFile.exists() ||
-                javaFile.lastModified() < type.getSourceFileHandle().getFileTimestamp()) {
+                javaFile.lastModified() < getSourceFileTimestamp(type)) {
           if (javaFile.exists()) {
             javaFile.delete();
           }
@@ -104,6 +104,13 @@ public class GWTsuCompiler {
             new URLClassLoader(gwtsuCacheUrls, Thread.currentThread().getContextClassLoader()));
     com.google.gwt.dev.Compiler.main(args);
     System.exit(0);
+  }
+
+  private static long getSourceFileTimestamp(IGosuClass type) {
+    if (type.getEnclosingType() != null) {
+      return getSourceFileTimestamp((IGosuClass) type.getEnclosingType());
+    }
+    return type.getSourceFileHandle().getFileTimestamp();
   }
 
   private static void findReferencedTypes(IGosuClass gsClass, Set<IGosuClass> gosuClasses) {

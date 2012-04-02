@@ -1,6 +1,6 @@
 package config
 
-uses db.roblog.User
+uses db.roblog.*
 uses ronin.*
 uses ronin.config.*
 uses ronin.console.*
@@ -10,14 +10,13 @@ class RoninConfig extends DefaultRoninConfig {
   construct(m : ApplicationMode, an : RoninServlet) {
     super(m, an)
     if(m == DEVELOPMENT) {
-      AdminConsole.start()
-      db.model.Database.JdbcUrl = "jdbc:h2:file:runtime/h2/devdb"
+      db.roblog.Database.JdbcUrl = "jdbc:h2:file:runtime/h2/devdb"
     } else if( m == TESTING ) {
-      db.model.Database.JdbcUrl = "jdbc:h2:file:runtime/h2/testdb"
+      db.roblog.Database.JdbcUrl = "jdbc:h2:file:runtime/h2/testdb"
     } else if( m == STAGING ) {
-      db.model.Database.JdbcUrl = "jdbc:h2:file:runtime/h2/stagingdb"
+      db.roblog.Database.JdbcUrl = "jdbc:h2:file:runtime/h2/stagingdb"
     } else if( m == PRODUCTION ) {
-      db.model.Database.JdbcUrl = "jdbc:h2:file:runtime/h2/proddb"
+      db.roblog.Database.JdbcUrl = "jdbc:h2:file:runtime/h2/proddb"
     }
     AuthManager = createDefaultAuthManager(
       \ username -> User.selectLike(new User(){:Name = username}).first(),
