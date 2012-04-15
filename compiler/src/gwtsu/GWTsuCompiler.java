@@ -10,9 +10,11 @@ import com.google.gwt.thirdparty.guava.common.collect.Sets;
 import gw.lang.Gosu;
 import gw.lang.ir.IRClass;
 import gw.lang.parser.expressions.IBeanMethodCallExpression;
+import gw.lang.parser.expressions.IFeatureLiteralExpression;
 import gw.lang.parser.expressions.IMemberAccessExpression;
 import gw.lang.parser.expressions.ITypeLiteralExpression;
 import gw.lang.parser.statements.IClassFileStatement;
+import gw.lang.parser.statements.IUsesStatement;
 import gw.lang.reflect.IType;
 import gw.lang.reflect.TypeSystem;
 import gw.lang.reflect.gs.IGosuClass;
@@ -114,7 +116,8 @@ public class GWTsuCompiler {
   }
 
   private static void findReferencedTypes(IGosuClass gsClass, Set<IGosuClass> gosuClasses) {
-    if (gosuClasses.contains(gsClass) || gsClass.getName().startsWith("gwtsu")
+    if (gosuClasses.contains(gsClass) 
+            || gsClass.getName().startsWith("gwtsu.") || gsClass.getName().startsWith("ronin.")
             || gsClass.getName().endsWith("gw.lang.reflect.gs.IGosuObject")) {
       return;
     }
@@ -157,7 +160,9 @@ public class GWTsuCompiler {
       classFileStatement.getContainedParsedElementsByType(ITypeLiteralExpression.class, typeLiterals);
       for (ITypeLiteralExpression tl : typeLiterals) {
         IType type = tl.getType().getType();
-        if (type instanceof IGosuClass) {
+        if (type instanceof IGosuClass &&
+                !(tl.getParent() instanceof IUsesStatement) &&
+                !(tl.getParent() instanceof IFeatureLiteralExpression)) {
           findReferencedTypes((IGosuClass) (type.isParameterizedType() ? type.getGenericType() : type),
                   gosuClasses);
         }

@@ -60,6 +60,8 @@ import gw.lang.ir.statement.IRSyntheticStatement;
 import gw.lang.ir.statement.IRThrowStatement;
 import gw.lang.ir.statement.IRTryCatchFinallyStatement;
 import gw.lang.ir.statement.IRWhileStatement;
+import gw.lang.reflect.IMethodInfo;
+import gw.lang.reflect.IParameterInfo;
 import gw.lang.reflect.IType;
 import gw.lang.reflect.Modifier;
 import gw.lang.reflect.TypeSystem;
@@ -697,6 +699,36 @@ public class IRClassCompiler {
                 methodCallExpression.getArgs().get(2));
         return;
       }
+      if (methodCallExpression.getOwnersType().getName().equals("ronin.IRoninUtilsEnhancement")
+              && methodCallExpression.getName().equals("urlFor")) {
+        IRNewExpression newExpression = (IRNewExpression) methodCallExpression.getArgs().get(0);
+        String className = ((IRStringLiteralExpression) ((IRMethodCallExpression) newExpression.getArgs().get(0)).getArgs().get(0)).getValue();
+        String methodName = ((IRStringLiteralExpression) newExpression.getArgs().get(1)).getValue();
+        List<? extends IMethodInfo> methods = TypeSystem.getByFullName(className).getTypeInfo().getMethods();
+        IParameterInfo[] parameters = null;
+        for (IMethodInfo method : methods) {
+          if (method.getDisplayName().equals(methodName)) {
+            parameters = method.getParameters();
+          }
+        }
+        if (parameters != null) {
+          builder.append("gwtsu.Util.roninUrl(\"")
+                  .append(getRelativeClassName(className))
+                  .append("\", \"")
+                  .append(methodName)
+                  .append("\"");
+          for (int i = 2; i < newExpression.getArgs().size(); i += 2) {
+            builder.append(", \"")
+                    .append(parameters[(i - 2) / 2].getName())
+                    .append("\", ");
+            appendExpression(builder, newExpression.getArgs().get(i), symbols);
+            builder.append(", ");
+            appendExpression(builder, newExpression.getArgs().get(i + 1), symbols);
+          }
+          builder.append(")");
+          return;
+        }
+      }
       boolean skipName = false;
       String replacement = replacementMethods.get(
               getTypeName(methodCallExpression.getOwnersType()) + "." + methodCallExpression.getName());
@@ -1057,6 +1089,10 @@ public class IRClassCompiler {
 
   private String getRelativeClassName() {
     String typeName = getTypeName(irClass.getThisType());
+    return getRelativeClassName(typeName);
+  }
+
+  private String getRelativeClassName(String typeName) {
     return typeName.substring(typeName.lastIndexOf(".") + 1);
   }
 

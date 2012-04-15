@@ -5,6 +5,8 @@ uses com.google.gwt.core.client.*
 uses com.google.gwt.http.client.*
 uses com.google.gwt.user.client.ui.*
 uses java.lang.*
+uses controller.PostCx
+uses ronin.IRoninUtils
 
 class RoblogEntryPoint implements EntryPoint {
 
@@ -13,10 +15,10 @@ class RoblogEntryPoint implements EntryPoint {
    */
   override function onModuleLoad() {
     RootPanel.get("main").add(new Label("Loading..."))
-    var builder = new RequestBuilder(RequestBuilder.GET, "Postcx/recent?page=0")
+    var builder = new RequestBuilder(RequestBuilder.GET,
+        IRoninUtils.urlFor(PostCx#recent(0)))
     builder.sendRequest(null, new RequestCallback() {
       override function onError(req : Request, e : Throwable) {
-
       }
       override function onResponseReceived(req : Request, resp : Response) {
         var posts : List<Post> = {}
