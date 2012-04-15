@@ -7,9 +7,9 @@ uses gw.vark.antlibs.*
 enhancement GWTsuVarkTargets : gw.vark.AardvarkFile {
 
   @Target
-  function gwtCompile(modules : String) {
+  function gwtCompile(modules : String, style : String = "OBF") {
     Ant.java(
-        :args = "-war html/public -deploy html/WEB-INF -strict ${modules}",
+        :args = "-war html/public -deploy html/WEB-INF -style ${style} -strict ${modules}",
         :jvmargs = "-Xmx1024m -Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=5005",
         :classname = "gwtsu.GWTsuCompiler",
         :classpath = this.classpath(this.file("src"))
