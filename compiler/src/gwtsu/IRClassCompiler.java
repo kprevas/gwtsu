@@ -404,28 +404,18 @@ public class IRClassCompiler {
       IRForEachStatement forEachStatement = (IRForEachStatement) statement;
       Map<String, IRSymbol> innerSymbols = Maps.newHashMap(symbols);
       List<IRStatement> initializers = forEachStatement.getInitializers();
-      if (initializers.size() > 1) {
-        builder.append("{\n");
-        for (IRStatement initializer : initializers) {
-          appendStatement(builder, initializer, innerSymbols);
-        }
-        builder.append("for (");
-      } else {
-        builder.append("for (");
-        for (int i = 0, initializersSize = initializers.size(); i < initializersSize; i++) {
-          if (i > 0) {
-            builder.append(", ");
-          }
-          appendStatement(builder, initializers.get(i), innerSymbols);
-          if (builder.substring(builder.length() - 2, builder.length()).equals(";\n")) {
-            builder.setLength(builder.length() - 2);
-          }
-        }
+      builder.append("{\n");
+      for (IRStatement initializer : initializers) {
+        appendStatement(builder, initializer, innerSymbols);
       }
+      List<IRStatement> incrementors = forEachStatement.getIncrementors();
+      for (int i = 0, incrementorsSize = incrementors.size(); i < incrementorsSize; i++) {
+        appendStatement(builder, incrementors.get(i), innerSymbols);
+      }
+      builder.append("for (");
       builder.append("; ");
       appendExpression(builder, forEachStatement.getLoopTest(), symbols);
       builder.append("; ");
-      List<IRStatement> incrementors = forEachStatement.getIncrementors();
       for (int i = 0, incrementorsSize = incrementors.size(); i < incrementorsSize; i++) {
         if (i > 0) {
           builder.append(", ");
@@ -437,9 +427,7 @@ public class IRClassCompiler {
       }
       builder.append(") ");
       appendStatement(builder, forEachStatement.getBody(), innerSymbols);
-      if (initializers.size() > 1) {
-        builder.append("}\n");
-      }
+      builder.append("}\n");
     } else if (statement instanceof IRIfStatement) {
       IRIfStatement ifStatement = (IRIfStatement) statement;
       if (ifStatement.getExpression() instanceof IRInstanceOfExpression) {
