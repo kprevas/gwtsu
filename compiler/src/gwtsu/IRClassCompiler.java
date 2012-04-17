@@ -408,26 +408,16 @@ public class IRClassCompiler {
       for (IRStatement initializer : initializers) {
         appendStatement(builder, initializer, innerSymbols);
       }
-      List<IRStatement> incrementors = forEachStatement.getIncrementors();
-      for (int i = 0, incrementorsSize = incrementors.size(); i < incrementorsSize; i++) {
-        appendStatement(builder, incrementors.get(i), innerSymbols);
-      }
-      builder.append("for (");
-      builder.append("; ");
+      builder.append("while (");
       appendExpression(builder, forEachStatement.getLoopTest(), symbols);
-      builder.append("; ");
-      for (int i = 0, incrementorsSize = incrementors.size(); i < incrementorsSize; i++) {
-        if (i > 0) {
-          builder.append(", ");
-        }
-        appendStatement(builder, incrementors.get(i), innerSymbols);
-        if (builder.substring(builder.length() - 2, builder.length()).equals(";\n")) {
-          builder.setLength(builder.length() - 2);
-        }
+      builder.append(") {\n");
+      List<IRStatement> incrementors = forEachStatement.getIncrementors();
+      for (IRStatement incrementor : incrementors) {
+        appendStatement(builder, incrementor, innerSymbols);
       }
-      builder.append(") ");
       appendStatement(builder, forEachStatement.getBody(), innerSymbols);
-      builder.append("}\n");
+      builder.append("}\n")
+              .append("}\n");
     } else if (statement instanceof IRIfStatement) {
       IRIfStatement ifStatement = (IRIfStatement) statement;
       if (ifStatement.getExpression() instanceof IRInstanceOfExpression) {
